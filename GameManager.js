@@ -23,6 +23,7 @@ const BACURA_DEFAULT_SPEED = 0.5;
 
 const ZOSHY_HP = 2;
 const ZOSHY_SCORE = 150;
+const ZOSHY_WIDTH = 32; // Default width for Zoshy, matches Enemy.js. Used for spawnX calculations.
 
 const DEROTA_HP = 3;
 const DEROTA_SCORE = 200;
@@ -107,8 +108,6 @@ export class GameManager {
             { "scrollPos": DEFAULT_AREA_LENGTH - 700, "enemyId": "bacura_guard", "spawnX": this.canvas.width / 2 - BACURA_DEFAULT_WIDTH / 2, "enemyType": "BacuraEnemy", "config": {"speed": 0.2} },
             { "scrollPos": DEFAULT_AREA_LENGTH - 500, "enemyId": "derota_g_left", "spawnX": this.canvas.width / 4 - 20, "initialMapY": DEFAULT_AREA_LENGTH - 500, "enemyType": "DerotaEnemy", "config": { "hp": 3 } },
             { "scrollPos": DEFAULT_AREA_LENGTH - 500, "enemyId": "derota_g_right", "spawnX": this.canvas.width * 3/4 - 20, "initialMapY": DEFAULT_AREA_LENGTH - 500, "enemyType": "DerotaEnemy", "config": { "hp": 3 } },
-
-            // End of Area 1, boss will trigger after this if DEFAULT_AREA_LENGTH is reached
         ];
         this.nextSpawnIndex = 0;
         this.isGameOverInputRegistered = false;
