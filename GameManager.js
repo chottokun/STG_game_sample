@@ -108,6 +108,49 @@ export class GameManager {
             { "scrollPos": DEFAULT_AREA_LENGTH - 700, "enemyId": "bacura_guard", "spawnX": this.canvas.width / 2 - BACURA_DEFAULT_WIDTH / 2, "enemyType": "BacuraEnemy", "config": {"speed": 0.2} },
             { "scrollPos": DEFAULT_AREA_LENGTH - 500, "enemyId": "derota_g_left", "spawnX": this.canvas.width / 4 - 20, "initialMapY": DEFAULT_AREA_LENGTH - 500, "enemyType": "DerotaEnemy", "config": { "hp": 3 } },
             { "scrollPos": DEFAULT_AREA_LENGTH - 500, "enemyId": "derota_g_right", "spawnX": this.canvas.width * 3/4 - 20, "initialMapY": DEFAULT_AREA_LENGTH - 500, "enemyType": "DerotaEnemy", "config": { "hp": 3 } },
+
+            // Area 2 Entries: scrollPos from DEFAULT_AREA_LENGTH to 2 * DEFAULT_AREA_LENGTH - 1
+            // Assuming DEFAULT_AREA_LENGTH = 5000, Area 2 is 5000-9999
+            { "scrollPos": DEFAULT_AREA_LENGTH + 100, "enemyId": "a2_toroid_1", "spawnX": this.canvas.width / 2, "enemyType": "AirEnemy", "hp": 2 },
+            { "scrollPos": DEFAULT_AREA_LENGTH + 300, "enemyId": "a2_toroid_2", "spawnX": this.canvas.width / 3, "enemyType": "AirEnemy", "hp": 2 },
+            { "scrollPos": DEFAULT_AREA_LENGTH + 350, "enemyId": "a2_toroid_3", "spawnX": this.canvas.width * 2/3, "enemyType": "AirEnemy", "hp": 2 },
+
+            { "scrollPos": DEFAULT_AREA_LENGTH + 500, "enemyId": "a2_zakato_1", "spawnX": 100, "enemyType": "ZakatoEnemy", "config": { "amplitude": 60, "verticalSpeed": 1.2, "frequency": 0.04 } },
+            { "scrollPos": DEFAULT_AREA_LENGTH + 550, "enemyId": "a2_zakato_2", "spawnX": this.canvas.width - 100 - ZAKATO_DEFAULT_WIDTH, "enemyType": "ZakatoEnemy", "config": { "amplitude": 60, "verticalSpeed": 1.2, "frequency": 0.04 } },
+
+            { "scrollPos": DEFAULT_AREA_LENGTH + 800, "enemyId": "a2_zoshy_1", "spawnX": this.canvas.width / 2 - ZOSHY_WIDTH / 2, "enemyType": "ZoshyEnemy", "config": { "stopY": 130, "hp": 3 } },
+
+            { "scrollPos": DEFAULT_AREA_LENGTH + 1000, "enemyId": "a2_bacura_1", "spawnX": 50, "enemyType": "BacuraEnemy", "config": { "width": 100, "speed": 0.6 } },
+            { "scrollPos": DEFAULT_AREA_LENGTH + 1000, "enemyId": "a2_bacura_2", "spawnX": this.canvas.width - 50 - 100, "enemyType": "BacuraEnemy", "config": { "width": 100, "speed": 0.6 } },
+
+            { "scrollPos": DEFAULT_AREA_LENGTH + 1300, "enemyId": "a2_derota_1", "spawnX": this.canvas.width / 3 - 20, "initialMapY": DEFAULT_AREA_LENGTH + 1300, "enemyType": "DerotaEnemy", "config": {"fireCooldown": 150}},
+            { "scrollPos": DEFAULT_AREA_LENGTH + 1350, "enemyId": "a2_derota_2", "spawnX": this.canvas.width * 2/3 - 20, "initialMapY": DEFAULT_AREA_LENGTH + 1350, "enemyType": "DerotaEnemy", "config": {"fireCooldown": 150}},
+
+            { "scrollPos": DEFAULT_AREA_LENGTH + 1600, "enemyId": "a2_toroid_line_1", "spawnX": this.canvas.width / 2 - 60, "enemyType": "AirEnemy", "hp": 2 },
+            { "scrollPos": DEFAULT_AREA_LENGTH + 1650, "enemyId": "a2_toroid_line_2", "spawnX": this.canvas.width / 2 - 30, "enemyType": "AirEnemy", "hp": 2 },
+            { "scrollPos": DEFAULT_AREA_LENGTH + 1700, "enemyId": "a2_toroid_line_3", "spawnX": this.canvas.width / 2, "enemyType": "AirEnemy", "hp": 2 },
+            { "scrollPos": DEFAULT_AREA_LENGTH + 1750, "enemyId": "a2_toroid_line_4", "spawnX": this.canvas.width / 2 + 30, "enemyType": "AirEnemy", "hp": 2 },
+            { "scrollPos": DEFAULT_AREA_LENGTH + 1800, "enemyId": "a2_toroid_line_5", "spawnX": this.canvas.width / 2 + 60, "enemyType": "AirEnemy", "hp": 2 },
+
+            { "scrollPos": DEFAULT_AREA_LENGTH + 2000, "enemyId": "a2_zoshy_flank_L", "spawnX": 100, "enemyType": "ZoshyEnemy", "config": { "stopY": 100 } },
+            { "scrollPos": DEFAULT_AREA_LENGTH + 2000, "enemyId": "a2_zoshy_flank_R", "spawnX": this.canvas.width - 100 - ZOSHY_WIDTH, "enemyType": "ZoshyEnemy", "config": { "stopY": 100 } },
+
+            { "scrollPos": DEFAULT_AREA_LENGTH + 2300, "enemyId": "a2_zakato_cross_1", "spawnX": 50, "enemyType": "ZakatoEnemy", "config": { "amplitude": (this.canvas.width/2 - 50 - ZAKATO_DEFAULT_WIDTH), "frequency": 0.02, "verticalSpeed": 0.8 } },
+            { "scrollPos": DEFAULT_AREA_LENGTH + 2350, "enemyId": "a2_zakato_cross_2", "spawnX": this.canvas.width - 50 - ZAKATO_DEFAULT_WIDTH, "enemyType": "ZakatoEnemy", "config": { "amplitude": -(this.canvas.width/2 - 50 - ZAKATO_DEFAULT_WIDTH), "initialX": this.canvas.width - 50 - ZAKATO_DEFAULT_WIDTH, "frequency": 0.02, "verticalSpeed": 0.8 } },
+
+            { "scrollPos": DEFAULT_AREA_LENGTH + 2800, "enemyId": "a2_bacura_wall", "spawnX": this.canvas.width / 2 - (BACURA_DEFAULT_WIDTH + 40)/2 , "enemyType": "BacuraEnemy", "config": { "width": BACURA_DEFAULT_WIDTH + 40, "speed": 0.25 } },
+
+            // Pyramids for Sol Trigger (Area 2) - different sequence or just more pyramids
+            { "scrollPos": DEFAULT_AREA_LENGTH + 3000, "enemyId": "a2_pyramid_A", "spawnX": this.canvas.width / 2 - 15, "initialMapY": DEFAULT_AREA_LENGTH + 3000, "enemyType": "PyramidEnemy", "config": { "id": "middle" } },
+            { "scrollPos": DEFAULT_AREA_LENGTH + 3050, "enemyId": "a2_pyramid_B", "spawnX": 120, "initialMapY": DEFAULT_AREA_LENGTH + 3050, "enemyType": "PyramidEnemy", "config": { "id": "left" } },
+            { "scrollPos": DEFAULT_AREA_LENGTH + 3100, "enemyId": "a2_pyramid_C", "spawnX": this.canvas.width - 120 - 30, "initialMapY": DEFAULT_AREA_LENGTH + 3100, "enemyType": "PyramidEnemy", "config": { "id": "right" } },
+
+            // Guards before Area 2 boss trigger
+            { "scrollPos": 2 * DEFAULT_AREA_LENGTH - 700, "enemyId": "a2_bacura_guard", "spawnX": this.canvas.width / 2 - BACURA_DEFAULT_WIDTH / 2, "enemyType": "BacuraEnemy", "config": {"speed": 0.2} },
+            { "scrollPos": 2 * DEFAULT_AREA_LENGTH - 500, "enemyId": "a2_derota_g_left", "spawnX": this.canvas.width / 4 - 20, "initialMapY": 2 * DEFAULT_AREA_LENGTH - 500, "enemyType": "DerotaEnemy", "config": { "hp": 4 } },
+            { "scrollPos": 2 * DEFAULT_AREA_LENGTH - 500, "enemyId": "a2_derota_g_right", "spawnX": this.canvas.width * 3/4 - 20, "initialMapY": 2 * DEFAULT_AREA_LENGTH - 500, "enemyType": "DerotaEnemy", "config": { "hp": 4 } },
+
+            // End of Area 2
         ];
         this.nextSpawnIndex = 0;
         this.isGameOverInputRegistered = false;
