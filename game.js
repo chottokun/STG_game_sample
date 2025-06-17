@@ -9,7 +9,7 @@ const ctx = canvas.getContext('2d');
 
 const gameManager = new GameManager(canvas);
 const player = new Player(canvas);
-const enemies = []; // Managed by game.js, passed to GameManager for spawning
+let enemies = []; // Managed by game.js, passed to GameManager for spawning
 
 const inputKeys = {};
 let blasterKeyHeld = false;
