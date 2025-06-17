@@ -1,12 +1,13 @@
 import { Player } from './Player.js';
-// Import all enemy types that GameManager might spawn by string name
-// Import all enemy types that GameManager might spawn by string name
 import { AirEnemy, ZakatoEnemy, BacuraEnemy, ZoshyEnemy, DerotaEnemy, GroundEnemy } from './Enemy.js';
 import { PyramidEnemy } from './PyramidEnemy.js';
 import { SolObject } from './SolObject.js';
 import { AndorgenesisCoreEnemy } from './AndorgenesisCoreEnemy.js';
+import { DomGramEnemy } from './DomGramEnemy.js';
+import { GrobdaEnemy } from './GrobdaEnemy.js';
 import { GameManager } from './GameManager.js';
 import { InputManager } from './InputManager.js';
+import { ZapperBullet } from './ZapperBullet.js';
 
 console.log("Game script loaded!");
 
@@ -14,263 +15,299 @@ const canvas = document.getElementById('gameCanvas');
 const ctx = canvas.getContext('2d');
 
 const gameManager = new GameManager(canvas);
-const inputManager = new InputManager(canvas); // Pass canvas to InputManager
-const player = new Player(canvas);
+const inputManager = new InputManager(canvas);
+const player = new Player(canvas, gameManager);
 let enemies = [];
 
-// Background scrolling elements
-const num_lines = 20; // Number of lines for scrolling effect
+const num_lines = 20;
 const line_properties = [];
 for (let i = 0; i < num_lines; i++) {
     line_properties.push({
         x: Math.random() * canvas.width,
-        y: Math.random() * canvas.height, // Initial y positions
-        speed: 1 + Math.random() * 2, // Varying speeds for parallax (optional)
+        y: Math.random() * canvas.height,
+        speed: 1 + Math.random() * 2,
         height: 5 + Math.random() * 10,
         width: 1 + Math.random() * 2
     });
 }
 
-// Event listener for game restart (can stay here as it's game-state specific)
 document.addEventListener('keydown', (event) => {
     if (gameManager.gameState === 'gameOver' && event.key === 'Enter' && !gameManager.isGameOverInputRegistered) {
         gameManager.isGameOverInputRegistered = true;
         gameManager.resetGame(player, enemies);
-        // Player's projectiles are cleared within player.reset() which is called by gameManager.resetGame()
     }
 });
-
-// Old keydown/keyup listeners that set inputKeys and blasterKeyHeld are removed
-// as InputManager now handles this.
 
 let lastTime = 0;
 function gameLoop(timestamp) {
     const deltaTime = timestamp - lastTime;
     lastTime = timestamp;
 
-    // Pass enemies, canvas, and player to gameManager.update
-    gameManager.update(deltaTime, enemies, canvas, player);
+    gameManager.update(deltaTime, enemies, canvas, player, inputManager);
 
     if (gameManager.gameState === 'playing') {
-        // Clear canvas
         ctx.fillStyle = 'black';
         ctx.fillRect(0, 0, canvas.width, canvas.height);
 
-        // Draw simple scrolling background
-        ctx.fillStyle = 'darkgreen';
-        for (const line of line_properties) {
-            // Update line's base position based on its individual speed relative to game scroll
-            // For a simple unified scroll, just use gameManager.scrollSpeed
-            line.y = (line.y + line.speed * (gameManager.scrollSpeed / 2) ) % canvas.height; // line.y is its "base" un-scrolled position
-
-            let yPos = (line.y - gameManager.currentScrollPos * (line.speed / gameManager.scrollSpeed) ) % canvas.height;
-             // This calculation needs to be robust for yPos to wrap around correctly.
-             // Let's simplify: draw based on currentScrollPos and re-randomize when off-screen.
-        }
-
-        // Simpler background scrolling:
-        ctx.fillStyle = '#224422'; // Dark green
+        ctx.fillStyle = '#224422';
         for(let i=0; i < line_properties.length; i++) {
             let p = line_properties[i];
-            // Each line has its own 'base' y, and we shift it by scrollPos.
-            // The modulo ensures it wraps around.
             let yPos = (p.y + gameManager.currentScrollPos * (p.speed /2) ) % canvas.height;
             ctx.fillRect(p.x, yPos, p.width, p.height);
         }
 
+        gameManager.spawnEnemies(enemies, canvas);
+        player.update(inputManager, enemies);
 
-        gameManager.spawnEnemies(enemies, canvas); // Call spawner
-
-        player.update(inputManager, enemies); // Pass InputManager instance
-
-        // Update and draw enemies
         for (let i = enemies.length - 1; i >= 0; i--) {
             const enemy = enemies[i];
 
-        // Update logic for different enemy types
-        if (enemy instanceof AndorgenesisCoreEnemy) {
-            enemy.update(gameManager.currentScrollPos, player, canvas, gameManager);
-        } else if (enemy instanceof PyramidEnemy) {
-            enemy.update(gameManager.currentScrollPos, gameManager); // Pass gameManager for pyramidDestroyed callback
-        } else if (enemy instanceof DerotaEnemy) {
-            enemy.update(gameManager.currentScrollPos, player, canvas);
-        } else if (enemy instanceof GroundEnemy) {
-            enemy.update(gameManager.currentScrollPos);
-        } else if (enemy instanceof ZoshyEnemy) {
-            enemy.update(player, canvas);
-        } else if (enemy instanceof AirEnemy) {
-            enemy.update();
-        } else {
-            enemy.update();
-        }
+            if (enemy instanceof AndorgenesisCoreEnemy) {
+                enemy.update(gameManager.currentScrollPos, player, canvas, gameManager);
+            } else if (enemy instanceof GrobdaEnemy) {
+                enemy.update(gameManager.currentScrollPos, player, canvas);
+            } else if (enemy instanceof PyramidEnemy) {
+                enemy.update(gameManager.currentScrollPos, gameManager);
+            } else if (enemy instanceof DerotaEnemy) {
+                enemy.update(gameManager.currentScrollPos, player, canvas);
+            } else if (enemy instanceof DomGramEnemy) {
+                enemy.update(gameManager.currentScrollPos);
+            } else if (enemy instanceof GroundEnemy) {
+                enemy.update(gameManager.currentScrollPos);
+            } else if (enemy instanceof ZoshyEnemy) {
+                enemy.update(player, canvas);
+            } else if (enemy instanceof AirEnemy) {
+                enemy.update();
+            } else {
+                enemy.update();
+            }
 
-        // Remove enemies off-screen (top or bottom)
-        if (enemy.position.y > canvas.height || enemy.position.y < -enemy.height) {
+            if (enemy.position.y > canvas.height || enemy.position.y < -enemy.height) {
                 enemies.splice(i, 1);
                 continue;
             }
 
-            // Collision: Player's Zappers vs Enemies
+            const enemyWasInitiallyAlive = !enemy.isDestroyed;
+
+            // --- Player Weapon Collisions (only if player is active and not invincible) ---
+            // Zappers vs Enemies (Main Body)
             for (let j = player.zappersOnScreen.length - 1; j >= 0; j--) {
                 const zapper = player.zappersOnScreen[j];
-                if (zapper.x < enemy.position.x + enemy.width &&
-                    zapper.x + zapper.width > enemy.position.x &&
-                    zapper.y < enemy.position.y + enemy.height &&
-                    zapper.y + zapper.height > enemy.position.y) {
+                if (!zapper.isActiveInPool || !enemyWasInitiallyAlive) continue;
 
-                    enemy.onHit();
+                if (zapper.position.x - zapper.width/2 < enemy.position.x + enemy.width &&
+                    zapper.position.x + zapper.width/2 > enemy.position.x &&
+                    zapper.position.y - zapper.height/2 < enemy.position.y + enemy.height &&
+                    zapper.position.y + zapper.height/2 > enemy.position.y) {
+
+                    const enemyTookDamage = enemy.onHit();
+                    gameManager.poolManager.returnObject(zapper, 'zapperBullet');
                     player.zappersOnScreen.splice(j, 1);
-                    if (enemy.isDestroyed) {
+
+                    if (enemyTookDamage && !enemy.isDestroyed && enemyWasInitiallyAlive) {
+                        gameManager.effectManager.addEffect('hitSpark', { x: zapper.position.x, y: zapper.position.y, size: 8, color: 'yellow', duration: 8 });
+                    }
+                    if (enemyWasInitiallyAlive && enemy.isDestroyed) {
                         gameManager.addScore(enemy.scoreValue);
+                        gameManager.effectManager.addEffect('explosion', { x: enemy.position.x + enemy.width/2, y: enemy.position.y + enemy.height/2, size: Math.max(enemy.width, enemy.height) * 0.9, color: 'orange', duration: 15 });
                     }
                     break;
                 }
             }
 
-            // Collision: Player's Blaster Bombs (Explosions) vs Enemies
-            if (!enemy.isDestroyed) {
+            // Blaster Bombs vs Enemies (Main Body)
+            if (!enemy.isDestroyed && enemyWasInitiallyAlive) {
                 for (const bomb of player.blasterBombs) {
-                    if (bomb.explosionTimer > 0) { // If bomb is currently exploding
+                    if (bomb.explosionTimer > 0) {
                         const bombCenterX = bomb.x;
                         const bombCenterY = bomb.y;
-                        // Basic Circle-Rectangle collision detection
                         const closestX = Math.max(enemy.position.x, Math.min(bombCenterX, enemy.position.x + enemy.width));
                         const closestY = Math.max(enemy.position.y, Math.min(bombCenterY, enemy.position.y + enemy.height));
                         const distanceSquared = ((bombCenterX - closestX) ** 2) + ((bombCenterY - closestY) ** 2);
 
                         if (distanceSquared < (bomb.explosionRadius * bomb.explosionRadius)) {
-                            const wasAlive = !enemy.isDestroyed; // Check if enemy was alive before this hit
-                            enemy.onHit(); // Apply damage, potentially destroying the enemy
-
-                            if (wasAlive && enemy.isDestroyed) { // If this hit destroyed the enemy
-                                gameManager.addScore(enemy.scoreValue);
-                                // No need for scoreCountedForThisBomb if we check wasAlive && enemy.isDestroyed
+                            const enemyWasAlivePreBomb = !enemy.isDestroyed;
+                            const tookDamage = enemy.onHit();
+                            if (tookDamage && !enemy.isDestroyed && enemyWasAlivePreBomb) {
+                                gameManager.effectManager.addEffect('hitSpark', { x: enemy.position.x + enemy.width/2, y: enemy.position.y + enemy.height/2, size: 12, color: 'white', duration: 10 });
                             }
-                            // Note: An enemy might be hit multiple times by the same explosion if the explosion
-                            // lasts several frames and the enemy is still within radius and not destroyed.
-                            // This is acceptable under "all ground objects within the blast radius are targeted".
-                            // The "max 4 targets" is not yet implemented.
+                            if (enemyWasAlivePreBomb && enemy.isDestroyed) {
+                                gameManager.addScore(enemy.scoreValue);
+                                gameManager.effectManager.addEffect('explosion', { x: enemy.position.x + enemy.width/2, y: enemy.position.y + enemy.height/2, size: Math.max(enemy.width, enemy.height), color: 'darkorange', duration: 20 });
+                            }
                         }
                     }
                 }
             }
 
-            // Collision: Player vs Enemies
-            // (No changes to this part based on current refactoring point, but ensure it's also robust)
-            if (!enemy.isDestroyed) {
-                const playerLeft = player.position.x - player.width / 2;
-                const playerTop = player.position.y - player.height / 2;
-                if (playerLeft < enemy.position.x + enemy.width &&
-                    playerLeft + player.width > enemy.position.x &&
-                    playerTop < enemy.position.y + enemy.height &&
-                    playerTop + player.height > enemy.position.y) {
+            // --- Player Collisions (only if player is active and not invincible) ---
+            if (player.isActive && !player.isInvincible) {
+                // Player vs Enemy Body
+                if (!enemy.isDestroyed && enemyWasInitiallyAlive) {
+                    const playerRect = {x: player.position.x - player.width/2, y: player.position.y - player.height/2, width: player.width, height: player.height};
+                    const enemyRect = {x: enemy.position.x, y: enemy.position.y, width: enemy.width, height: enemy.height};
+                    if (playerRect.x < enemyRect.x + enemyRect.width && playerRect.x + playerRect.width > enemyRect.x &&
+                        playerRect.y < enemyRect.y + enemyRect.height && playerRect.y + playerRect.height > enemyRect.y) {
 
-                    // Player.onHit() is called to reset position / play sound etc.
-                    player.onHit();
-                    gameManager.playerDied();
+                        player.onHit();
+                        gameManager.playerDied(player);
 
-                    const wasEnemyAlive = !enemy.isDestroyed;
-                    enemy.onHit();
-                    if (wasEnemyAlive && enemy.isDestroyed) {
-                         gameManager.addScore(enemy.scoreValue);
+                        const enemyWasAlivePrePlayerCollision = !enemy.isDestroyed;
+                        enemy.onHit();
+                        if (enemyWasAlivePrePlayerCollision && enemy.isDestroyed) {
+                             gameManager.addScore(enemy.scoreValue);
+                             gameManager.effectManager.addEffect('explosion', { x: enemy.position.x + enemy.width/2, y: enemy.position.y + enemy.height/2, size: Math.max(enemy.width, enemy.height) * 0.8, color: 'red' });
+                        }
+                        if (gameManager.gameState === 'gameOver') break;
                     }
-
-                    if (gameManager.gameState === 'gameOver') break;
                 }
-            }
 
-            // Collision: Player vs Enemy Bullets
-            if (enemy.bullets && enemy.bullets.length > 0) {
-                for (let k = enemy.bullets.length - 1; k >= 0; k--) {
-                    const bullet = enemy.bullets[k];
-                    // Basic rectangle collision for player vs bullet
-                    // Player position is center, bullet position is center (as per Bullet.draw)
-                    const playerLeft = player.position.x - player.width / 2;
-                    const playerRight = player.position.x + player.width / 2;
-                    const playerTop = player.position.y - player.height / 2;
-                    const playerBottom = player.position.y + player.height / 2;
-
-                    const bulletLeft = bullet.position.x - bullet.width / 2;
-                    const bulletRight = bullet.position.x + bullet.width / 2;
-                    const bulletTop = bullet.position.y - bullet.height / 2;
-                    const bulletBottom = bullet.position.y + bullet.height / 2;
-
-                    if (playerLeft < bulletRight && playerRight > bulletLeft &&
-                        playerTop < bulletBottom && playerBottom > bulletTop) {
-
-                        player.onHit(); // Player takes a hit
-                        gameManager.playerDied(); // GameManager updates lives/state
-                        enemy.bullets.splice(k, 1); // Remove bullet
-
-                        if (gameManager.gameState === 'gameOver') {
-                            // Break all loops if game over
-                            // This requires breaking from outer enemy loop as well.
-                            // A flag or returning early from gameLoop might be better.
-                            // For now, just break this inner loop.
-                            break;
+                // Player vs Enemy Bullets (from main enemy AND its turrets)
+                let allEnemyBullets = [];
+                if (enemy.bullets && enemy.bullets.length > 0) {
+                    allEnemyBullets = allEnemyBullets.concat(enemy.bullets);
+                }
+                if (enemy instanceof AndorgenesisCoreEnemy && enemy.turrets) {
+                    for (const turret of enemy.turrets) {
+                        if (!turret.isDestroyed && turret.bullets && turret.bullets.length > 0) {
+                            allEnemyBullets = allEnemyBullets.concat(turret.bullets);
                         }
                     }
                 }
-                if (gameManager.gameState === 'gameOver') break; // Break enemy loop if game over
+
+                for (let k = allEnemyBullets.length - 1; k >= 0; k--) {
+                    const bullet = allEnemyBullets[k];
+                    if (bullet.isActive === false) continue;
+
+                    const playerRect = {x: player.position.x - player.width/2, y: player.position.y - player.height/2, width: player.width, height: player.height};
+                    const bulletRect = {x: bullet.position.x - bullet.width/2, y: bullet.position.y - bullet.height/2, width: bullet.width, height: bullet.height};
+
+                    if (playerRect.x < bulletRect.x + bulletRect.width && playerRect.x + playerRect.width > bulletRect.x &&
+                        playerRect.y < bulletRect.y + bulletRect.height && playerRect.y + playerRect.height > bulletRect.y) {
+                        player.onHit();
+                        gameManager.playerDied(player);
+                        bullet.isActive = false;
+                        if (gameManager.gameState === 'gameOver') break;
+                    }
+                }
+                if (gameManager.gameState === 'gameOver') break;
+            } // End of player.isActive && !player.isInvincible block
+
+            // --- Andorgenesis Turret Weapon Collisions (can happen even if player is invincible) ---
+            if (enemy instanceof AndorgenesisCoreEnemy && enemy.turrets) {
+                for (const turret of enemy.turrets) {
+                    if (!turret.isDestroyed) {
+                        const turretWasInitiallyAlive = !turret.isDestroyed;
+
+                        // Zappers vs Turrets
+                        for (let j = player.zappersOnScreen.length - 1; j >= 0; j--) {
+                            const zapper = player.zappersOnScreen[j];
+                            if (!zapper.isActiveInPool) continue;
+                            if (zapper.position.x - zapper.width/2 < turret.position.x + turret.width &&
+                                zapper.position.x + zapper.width/2 > turret.position.x &&
+                                zapper.position.y - zapper.height/2 < turret.position.y + turret.height &&
+                                zapper.position.y + zapper.height/2 > turret.position.y) {
+                                const turretTookDamage = turret.onHit();
+                                gameManager.poolManager.returnObject(zapper, 'zapperBullet');
+                                player.zappersOnScreen.splice(j, 1);
+                                if (turretTookDamage && !turret.isDestroyed && turretWasInitiallyAlive) {
+                                    gameManager.effectManager.addEffect('hitSpark', { x: zapper.position.x, y: zapper.position.y, size: 8, color: 'yellow', duration: 8 });
+                                }
+                                if (turretWasInitiallyAlive && turret.isDestroyed) {
+                                    gameManager.addScore(turret.scoreValue);
+                                    gameManager.effectManager.addEffect('explosion', { x: turret.position.x + turret.width/2, y: turret.position.y + turret.height/2, size: turret.width, color: 'orange', duration: 15 });
+                                }
+                                break;
+                            }
+                        }
+                        if (turret.isDestroyed && turretWasInitiallyAlive && !turret.isDyingWithBoss) continue;
+
+                        // Blaster Bombs vs Turrets
+                        for (const bomb of player.blasterBombs) {
+                            if (bomb.explosionTimer > 0) {
+                                const bombCenterX = bomb.x;
+                                const bombCenterY = bomb.y;
+                                const closestX = Math.max(turret.position.x, Math.min(bombCenterX, turret.position.x + turret.width));
+                                const closestY = Math.max(turret.position.y, Math.min(bombCenterY, turret.position.y + turret.height));
+                                const distanceSquared = ((bombCenterX - closestX) ** 2) + ((bombCenterY - closestY) ** 2);
+                                if (distanceSquared < (bomb.explosionRadius * bomb.explosionRadius)) {
+                                    const turretWasAlivePreBomb = !turret.isDestroyed;
+                                    const turretTookDamage = turret.onHit();
+                                    if (turretTookDamage && !turret.isDestroyed && turretWasAlivePreBomb) {
+                                        gameManager.effectManager.addEffect('hitSpark', { x: turret.position.x + turret.width/2, y: turret.position.y + turret.height/2, size: 10, color: 'white', duration: 10 });
+                                    }
+                                    if (turretWasAlivePreBomb && turret.isDestroyed) {
+                                        gameManager.addScore(turret.scoreValue);
+                                        gameManager.effectManager.addEffect('explosion', { x: turret.position.x + turret.width/2, y: turret.position.y + turret.height/2, size: turret.width, color: 'orange', duration: 15 });
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+            } // End of Andorgenesis Turret Collisions
+
+            // Filter inactive bullets from their original arrays (after all collision checks for this enemy/turrets)
+            if (enemy.bullets) {
+                enemy.bullets = enemy.bullets.filter(b => b.isActive !== false);
             }
-
-
+            if (enemy instanceof AndorgenesisCoreEnemy && enemy.turrets) {
+                for (const turret of enemy.turrets) {
+                    if (turret.bullets) {
+                        turret.bullets = turret.bullets.filter(b => b.isActive !== false);
+                    }
+                }
+            }
             if (!enemy.isDestroyed) {
-                enemy.draw(ctx); // Enemy draws itself and its bullets
+                enemy.draw(ctx);
             }
-        } // End of main enemy loop
+        }
 
         if (gameManager.gameState === 'gameOver') {
-             // Enemies list will be cleared by resetGame if player restarts.
+            // Game over state handled below
         } else {
-             // Filter out destroyed enemies from the main array
-             // Also, trigger pyramidDestroyed callback here if a pyramid was just destroyed.
-             // This was moved to PyramidEnemy.update() for simplicity with gameManager reference.
              enemies = enemies.filter(enemy => !enemy.isDestroyed);
         }
 
         player.draw(ctx);
 
-    // Draw Sol object if it's active
-    if (gameManager.solActive && gameManager.solObject) {
-        gameManager.solObject.draw(ctx);
-    }
+        if (gameManager.solActive && gameManager.solObject) {
+            gameManager.solObject.draw(ctx);
+        }
 
-    // Draw Blaster UI Area (visual cue for touch controls)
-    if (inputManager.blasterUiArea && inputManager.blasterUiArea.height > 0) { // Check if area is defined
-        ctx.fillStyle = "rgba(100, 100, 100, 0.2)"; // Semi-transparent grey
-        ctx.fillRect(
-            inputManager.blasterUiArea.x,
-            inputManager.blasterUiArea.y,
-            inputManager.blasterUiArea.width,
-            inputManager.blasterUiArea.height
-        );
-        ctx.fillStyle = "rgba(255, 255, 255, 0.5)"; // Lighter text for the cue
-        ctx.font = "16px Arial";
-        ctx.textAlign = "center";
-        ctx.fillText(
-            "BLASTER ZONE",
-            canvas.width / 2,
-            inputManager.blasterUiArea.y + inputManager.blasterUiArea.height / 2 + 8 // Adjust text position
-        );
-        ctx.textAlign = "left"; // Reset alignment
-    }
+        gameManager.effectManager.draw(ctx);
 
+        if (inputManager.blasterUiArea && inputManager.blasterUiArea.height > 0) {
+            ctx.fillStyle = "rgba(100, 100, 100, 0.2)";
+            ctx.fillRect(
+                inputManager.blasterUiArea.x,
+                inputManager.blasterUiArea.y,
+                inputManager.blasterUiArea.width,
+                inputManager.blasterUiArea.height
+            );
+            ctx.fillStyle = "rgba(255, 255, 255, 0.5)";
+            ctx.font = "16px Arial";
+            ctx.textAlign = "center";
+            ctx.fillText(
+                "BLASTER ZONE",
+                canvas.width / 2,
+                inputManager.blasterUiArea.y + inputManager.blasterUiArea.height / 2 + 8
+            );
+            ctx.textAlign = "left";
+        }
 
-        // Draw Score, Lives, High Score
         ctx.fillStyle = "white";
         ctx.font = "16px Arial";
         ctx.fillText("Score: " + gameManager.score, 10, 20);
         ctx.fillText("Lives: " + gameManager.playerLives, canvas.width - 80, 20);
         ctx.fillText("High Score: " + gameManager.highScore, canvas.width / 2 - 60, 20);
 
-        // Display "1UP" message if timer is active
         if (gameManager.oneUpDisplayTimer > 0) {
             ctx.fillStyle = "yellow";
             ctx.font = "bold 24px Arial";
             ctx.textAlign = "center";
-            ctx.fillText("1UP", canvas.width / 2, canvas.height / 2 - 60); // Positioned above center
-            ctx.textAlign = "left"; // Reset alignment
+            ctx.fillText("1UP", canvas.width / 2, canvas.height / 2 - 60);
+            ctx.textAlign = "left";
         }
 
     } else if (gameManager.gameState === 'gameOver') {
@@ -284,12 +321,13 @@ function gameLoop(timestamp) {
         ctx.font = "24px Arial";
         ctx.fillText("Final Score: " + gameManager.score, canvas.width / 2, canvas.height / 2);
         ctx.fillText("Press Enter to Restart", canvas.width / 2, canvas.height / 2 + 40);
-        ctx.textAlign = "left"; // Reset alignment
+        ctx.textAlign = "left";
+
+        gameManager.effectManager.draw(ctx);
     }
 
     requestAnimationFrame(gameLoop);
 }
 
-// Start the game loop
-lastTime = performance.now(); // Initialize lastTime before first call
+lastTime = performance.now();
 requestAnimationFrame(gameLoop);

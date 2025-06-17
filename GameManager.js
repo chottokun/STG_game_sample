@@ -2,6 +2,11 @@ import { AirEnemy, ZakatoEnemy, BacuraEnemy, ZoshyEnemy, DerotaEnemy, GroundEnem
 import { PyramidEnemy } from './PyramidEnemy.js';
 import { SolObject } from './SolObject.js';
 import { AndorgenesisCoreEnemy } from './AndorgenesisCoreEnemy.js';
+import { DomGramEnemy } from './DomGramEnemy.js';
+import { GrobdaEnemy } from './GrobdaEnemy.js';
+import { EffectManager } from './EffectManager.js';
+import { ObjectPoolManager } from './ObjectPoolManager.js';
+import { ZapperBullet } from './ZapperBullet.js';
 
 // Constants
 const INITIAL_PLAYER_LIVES = 3;
@@ -23,13 +28,14 @@ const BACURA_DEFAULT_SPEED = 0.5;
 
 const ZOSHY_HP = 2;
 const ZOSHY_SCORE = 150;
-const ZOSHY_WIDTH = 32; // Default width for Zoshy, matches Enemy.js. Used for spawnX calculations.
+const ZOSHY_WIDTH = 32;
 
 const DEROTA_HP = 3;
 const DEROTA_SCORE = 200;
+const DEROTA_DEFAULT_WIDTH = 40; // For spawnX calculations if needed
 
 const CORE_WIDTH = 120;
-const DEFAULT_AREA_LENGTH = 5000;
+const DEFAULT_AREA_LENGTH = 5000; // Adjusted for more content per area
 
 // Sol Trigger Constants
 const SOL_TRIGGER_SEQUENCE = ['left', 'right', 'middle'];
@@ -63,101 +69,125 @@ export class GameManager {
         this.solActive = false;
         this.solObject = null;
 
+        this.effectManager = new EffectManager(this.canvas);
+        this.poolManager = new ObjectPoolManager();
+
+        this.poolManager.registerPool('zapperBullet', ZapperBullet, 5);
+
         this.enemySpawnTimeline = [
-            // Start of Area 1
-            { "scrollPos": 100, "enemyId": "toroid_1", "spawnX": this.canvas.width / 2, "enemyType": "AirEnemy" },
-            { "scrollPos": 300, "enemyId": "toroid_2", "spawnX": this.canvas.width / 3, "enemyType": "AirEnemy" },
-            { "scrollPos": 400, "enemyId": "toroid_3", "spawnX": this.canvas.width * 2 / 3, "enemyType": "AirEnemy" },
+            // --- Area 1 --- (scrollPos 0 to AREA_LENGTH - 1)
+            { "scrollPos": 100, "enemyId": "a1_toroid_1", "spawnX": this.canvas.width / 2, "enemyType": "AirEnemy" },
+            { "scrollPos": 300, "enemyId": "a1_toroid_2", "spawnX": this.canvas.width / 3, "enemyType": "AirEnemy" },
+            { "scrollPos": 350, "enemyId": "a1_toroid_3", "spawnX": this.canvas.width * 2 / 3, "enemyType": "AirEnemy" },
+            { "scrollPos": 500, "enemyId": "a1_pyramid_left", "spawnX": 100, "initialMapY": 500, "enemyType": "PyramidEnemy", "config": { "id": "left" } },
+            { "scrollPos": 550, "enemyId": "a1_pyramid_right", "spawnX": this.canvas.width - 100 - 30, "initialMapY": 550, "enemyType": "PyramidEnemy", "config": { "id": "right" } },
+            { "scrollPos": 600, "enemyId": "a1_pyramid_middle", "spawnX": this.canvas.width / 2 - 15, "initialMapY": 600, "enemyType": "PyramidEnemy", "config": { "id": "middle" } },
+            { "scrollPos": 700, "enemyId": "a1_zakato_1", "spawnX": this.canvas.width / 2 - ZAKATO_DEFAULT_WIDTH / 2, "enemyType": "ZakatoEnemy", "config": { "amplitude": 80, "frequency": 0.025, "verticalSpeed": 1 } },
+            { "scrollPos": 900, "enemyId": "a1_zoshy_1", "spawnX": this.canvas.width / 2, "enemyType": "ZoshyEnemy", "config": { "stopY": 100 } },
+            { "scrollPos": 1050, "enemyId": "a1_bacura_1", "spawnX": this.canvas.width / 2 - BACURA_DEFAULT_WIDTH / 2, "enemyType": "BacuraEnemy", "config": { "speed": 0.7 } },
+            { "scrollPos": 1300, "enemyId": "a1_toroid_s1", "spawnX": 50, "enemyType": "AirEnemy" },
+            { "scrollPos": 1350, "enemyId": "a1_toroid_s2", "spawnX": 100, "enemyType": "AirEnemy" },
+            { "scrollPos": 1400, "enemyId": "a1_domgram_1", "spawnX": this.canvas.width - 80 - DOMGRAM_DEFAULT_WIDTH, "initialMapY": 1400, "enemyType": "DomGramEnemy" },
+            { "scrollPos": 1500, "enemyId": "a1_derota_1", "spawnX": 100, "initialMapY": 1500, "enemyType": "DerotaEnemy" },
+            { "scrollPos": 1700, "enemyId": "a1_grobda_1", "spawnX": this.canvas.width / 2 - 20, "initialMapY": 1700, "enemyType": "GrobdaEnemy", "config": {"patrolDistance": 50}},
+            { "scrollPos": 2000, "enemyId": "a1_zakato_pair1", "spawnX": 50, "enemyType": "ZakatoEnemy", "config": { "amplitude": 40, "verticalSpeed": 1.2 } },
+            { "scrollPos": 2050, "enemyId": "a1_zakato_pair2", "spawnX": this.canvas.width - 50 - ZAKATO_DEFAULT_WIDTH, "enemyType": "ZakatoEnemy", "config": { "amplitude": 40, "verticalSpeed": 1.2 } },
+            { "scrollPos": 2300, "enemyId": "a1_zoshy_duo1", "spawnX": this.canvas.width * 0.25, "enemyType": "ZoshyEnemy", "config": { "stopY": 120, "hp": 2 } },
+            { "scrollPos": 2350, "enemyId": "a1_zoshy_duo2", "spawnX": this.canvas.width * 0.75, "enemyType": "ZoshyEnemy", "config": { "stopY": 120, "hp": 2 } },
+            { "scrollPos": 2600, "enemyId": "a1_bacura_block", "spawnX": 100, "enemyType": "BacuraEnemy", "config": { "width": this.canvas.width - 200, "speed": 0.3 } },
+            { "scrollPos": 3000, "enemyId": "a1_derota_pair1", "spawnX": 70, "initialMapY": 3000, "enemyType": "DerotaEnemy" },
+            { "scrollPos": 3000, "enemyId": "a1_derota_pair2", "spawnX": this.canvas.width - 70 - DEROTA_DEFAULT_WIDTH, "initialMapY": 3000, "enemyType": "DerotaEnemy" },
+            { "scrollPos": 3300, "enemyId": "a1_domgram_fort1", "spawnX": 50, "initialMapY": 3300, "enemyType": "DomGramEnemy", "config": {"hp": 5, "score": 1800}},
+            { "scrollPos": 3300, "enemyId": "a1_domgram_fort2", "spawnX": this.canvas.width - 50 - DOMGRAM_DEFAULT_WIDTH, "initialMapY": 3300, "enemyType": "DomGramEnemy", "config": {"hp": 5, "score": 1800}},
+            { "scrollPos": 3600, "enemyId": "a1_grobda_center", "spawnX": this.canvas.width / 2 - 20, "initialMapY": 3600, "enemyType": "GrobdaEnemy", "config": {"patrolDistance": 100, "detectionRange": 300, "hp": 5}},
+            { "scrollPos": this.AREA_LENGTH - 700, "enemyId": "a1_bacura_guard", "spawnX": this.canvas.width / 2 - BACURA_DEFAULT_WIDTH / 2, "enemyType": "BacuraEnemy", "config": {"speed": 0.2} },
+            { "scrollPos": this.AREA_LENGTH - 500, "enemyId": "a1_derota_g_left", "spawnX": this.canvas.width / 4 - 20, "initialMapY": this.AREA_LENGTH - 500, "enemyType": "DerotaEnemy", "config": { "hp": 3 } },
+            { "scrollPos": this.AREA_LENGTH - 500, "enemyId": "a1_derota_g_right", "spawnX": this.canvas.width * 3/4 - 20, "initialMapY": this.AREA_LENGTH - 500, "enemyType": "DerotaEnemy", "config": { "hp": 3 } },
 
-            // Pyramids for Sol Trigger
-            { "scrollPos": 500, "enemyId": "pyramid_left", "spawnX": 100, "initialMapY": 500, "enemyType": "PyramidEnemy", "config": { "id": "left" } },
-            { "scrollPos": 550, "enemyId": "pyramid_right", "spawnX": this.canvas.width - 100 - 30, "initialMapY": 550, "enemyType": "PyramidEnemy", "config": { "id": "right" } }, // 30 is pyramid width
-            { "scrollPos": 600, "enemyId": "pyramid_middle", "spawnX": this.canvas.width / 2 - 15, "initialMapY": 600, "enemyType": "PyramidEnemy", "config": { "id": "middle" } },
+            // --- Area 2 Entries --- (scrollPos AREA_LENGTH to 2 * AREA_LENGTH - 1)
+            { "scrollPos": this.AREA_LENGTH + 100, "enemyId": "a2_toroid_wave1", "spawnX": 50, "enemyType": "AirEnemy", "hp": 2 },
+            { "scrollPos": this.AREA_LENGTH + 150, "enemyId": "a2_toroid_wave2", "spawnX": 100, "enemyType": "AirEnemy", "hp": 2 },
+            { "scrollPos": this.AREA_LENGTH + 200, "enemyId": "a2_toroid_wave3", "spawnX": 150, "enemyType": "AirEnemy", "hp": 2 },
+            { "scrollPos": this.AREA_LENGTH + 250, "enemyId": "a2_toroid_wave4", "spawnX": 100, "enemyType": "AirEnemy", "hp": 2 },
+            { "scrollPos": this.AREA_LENGTH + 300, "enemyId": "a2_toroid_wave5", "spawnX": 50, "enemyType": "AirEnemy", "hp": 2 },
 
-            { "scrollPos": 700, "enemyId": "zakato_1", "spawnX": this.canvas.width / 2 - ZAKATO_DEFAULT_WIDTH / 2, "enemyType": "ZakatoEnemy", "config": { "amplitude": 80, "frequency": 0.025, "verticalSpeed": 1 } },
-            { "scrollPos": 900, "enemyId": "zoshy_1", "spawnX": this.canvas.width / 2, "enemyType": "ZoshyEnemy", "config": { "stopY": 100 } },
+            { "scrollPos": this.AREA_LENGTH + 500, "enemyId": "a2_zakato_pair1", "spawnX": 80, "enemyType": "ZakatoEnemy", "config": { "amplitude": 60, "verticalSpeed": 1.2, "frequency": 0.04 } },
+            { "scrollPos": this.AREA_LENGTH + 550, "enemyId": "a2_zakato_pair2", "spawnX": this.canvas.width - 80 - ZAKATO_DEFAULT_WIDTH, "enemyType": "ZakatoEnemy", "config": { "amplitude": 60, "verticalSpeed": 1.2, "frequency": 0.04 } },
 
-            { "scrollPos": 1050, "enemyId": "bacura_1_center", "spawnX": this.canvas.width / 2 - BACURA_DEFAULT_WIDTH / 2, "enemyType": "BacuraEnemy", "config": { "speed": 0.7 } },
+            { "scrollPos": this.AREA_LENGTH + 800, "enemyId": "a2_zoshy_center", "spawnX": this.canvas.width / 2 - ZOSHY_WIDTH / 2, "enemyType": "ZoshyEnemy", "config": { "stopY": 130, "hp": 3, "linger": 120 } },
 
-            { "scrollPos": 1300, "enemyId": "toroid_squad_1", "spawnX": 50, "enemyType": "AirEnemy" },
-            { "scrollPos": 1350, "enemyId": "toroid_squad_2", "spawnX": 100, "enemyType": "AirEnemy" },
-            { "scrollPos": 1400, "enemyId": "toroid_squad_3", "spawnX": 150, "enemyType": "AirEnemy" },
+            { "scrollPos": this.AREA_LENGTH + 1000, "enemyId": "a2_domgram_left", "spawnX": 50, "initialMapY": this.AREA_LENGTH + 1000, "enemyType": "DomGramEnemy", "config": {"hp": 5} },
+            { "scrollPos": this.AREA_LENGTH + 1000, "enemyId": "a2_domgram_right", "spawnX": this.canvas.width - 50 - DOMGRAM_DEFAULT_WIDTH, "initialMapY": this.AREA_LENGTH + 1000, "enemyType": "DomGramEnemy", "config": {"hp": 5} },
 
-            { "scrollPos": 1500, "enemyId": "derota_front_left", "spawnX": this.canvas.width / 4 - 20, "initialMapY": 1500, "enemyType": "DerotaEnemy" },
-            { "scrollPos": 1550, "enemyId": "derota_front_right", "spawnX": this.canvas.width * 3 / 4 - 20, "initialMapY": 1550, "enemyType": "DerotaEnemy" },
+            { "scrollPos": this.AREA_LENGTH + 1200, "enemyId": "a2_grobda_tough", "spawnX": this.canvas.width / 2 - GROBDA_DEFAULT_WIDTH / 2, "initialMapY": this.AREA_LENGTH + 1200, "enemyType": "GrobdaEnemy", "config": {"patrolDistance": 30, "hp": 5, "detectionRange": 300, "fireCooldown": 80}},
 
-            { "scrollPos": 1800, "enemyId": "zakato_2_weaving", "spawnX": 150, "enemyType": "ZakatoEnemy", "config": { "amplitude": 70, "verticalSpeed": 1.2, "frequency": 0.035 } },
-            { "scrollPos": 1900, "enemyId": "zakato_3_weaving", "spawnX": this.canvas.width - 150 - ZAKATO_DEFAULT_WIDTH, "enemyType": "ZakatoEnemy", "config": { "amplitude": 70, "verticalSpeed": 1.2, "frequency": 0.035 } },
+            { "scrollPos": this.AREA_LENGTH + 1500, "enemyId": "a2_bacura_center_fast", "spawnX": this.canvas.width / 2 - BACURA_DEFAULT_WIDTH / 2, "enemyType": "BacuraEnemy", "config": { "speed": 1.0 } },
 
-            { "scrollPos": 2200, "enemyId": "zoshy_pair_1", "spawnX": this.canvas.width / 3, "enemyType": "ZoshyEnemy", "config": { "stopY": 150, "hp": 2 } },
-            { "scrollPos": 2250, "enemyId": "zoshy_pair_2", "spawnX": this.canvas.width * 2 / 3, "enemyType": "ZoshyEnemy", "config": { "stopY": 150, "hp": 2 } },
+            { "scrollPos": this.AREA_LENGTH + 1800, "enemyId": "a2_pyramid_L", "spawnX": 80, "initialMapY": this.AREA_LENGTH + 1800, "enemyType": "PyramidEnemy", "config": { "id": "left" } },
+            { "scrollPos": this.AREA_LENGTH + 1850, "enemyId": "a2_pyramid_R", "spawnX": this.canvas.width - 80 - 30, "initialMapY": this.AREA_LENGTH + 1850, "enemyType": "PyramidEnemy", "config": { "id": "right" } },
+            { "scrollPos": this.AREA_LENGTH + 1900, "enemyId": "a2_pyramid_M", "spawnX": this.canvas.width / 2 - 15, "initialMapY": this.AREA_LENGTH + 1900, "enemyType": "PyramidEnemy", "config": { "id": "middle" } },
 
-            { "scrollPos": 2500, "enemyId": "bacura_long", "spawnX": this.canvas.width / 2 - 100, "enemyType": "BacuraEnemy", "config": { "width": 200, "height": 20, "speed": 0.3 } },
+            { "scrollPos": this.AREA_LENGTH + 2200, "enemyId": "a2_derota_ambush1", "spawnX": 60, "initialMapY": this.AREA_LENGTH + 2200, "enemyType": "DerotaEnemy" },
+            { "scrollPos": this.AREA_LENGTH + 2200, "enemyId": "a2_derota_ambush2", "spawnX": this.canvas.width - 60 - DEROTA_DEFAULT_WIDTH, "initialMapY": this.AREA_LENGTH + 2200, "enemyType": "DerotaEnemy" },
 
-            { "scrollPos": 2800, "enemyId": "toroid_wave_1", "spawnX": 50, "enemyType": "AirEnemy", "hp": 2 },
-            { "scrollPos": 2850, "enemyId": "toroid_wave_2", "spawnX": this.canvas.width - 50 - 30, "enemyType": "AirEnemy", "hp": 2 },
-            { "scrollPos": 2900, "enemyId": "toroid_wave_3", "spawnX": 100, "enemyType": "AirEnemy", "hp": 2 },
-            { "scrollPos": 2950, "enemyId": "toroid_wave_4", "spawnX": this.canvas.width - 100 - 30, "enemyType": "AirEnemy", "hp": 2 },
+            { "scrollPos": this.AREA_LENGTH + 2500, "enemyId": "a2_zakato_squad1", "spawnX": this.canvas.width * 0.25, "enemyType": "ZakatoEnemy", "config": {"verticalSpeed": 1.4, "hp": 2}},
+            { "scrollPos": this.AREA_LENGTH + 2550, "enemyId": "a2_zakato_squad2", "spawnX": this.canvas.width * 0.5, "enemyType": "ZakatoEnemy", "config": {"verticalSpeed": 1.4, "hp": 2}},
+            { "scrollPos": this.AREA_LENGTH + 2600, "enemyId": "a2_zakato_squad3", "spawnX": this.canvas.width * 0.75, "enemyType": "ZakatoEnemy", "config": {"verticalSpeed": 1.4, "hp": 2}},
 
-            { "scrollPos": 3200, "enemyId": "derota_center_strong", "spawnX": this.canvas.width/2 - 20, "initialMapY": 3200, "enemyType": "DerotaEnemy", "config": { "hp": 5, "fireCooldown": 120} },
+            { "scrollPos": (2 * this.AREA_LENGTH) - 700, "enemyId": "a2_bacura_guard_final", "spawnX": this.canvas.width / 2 - (BACURA_DEFAULT_WIDTH + 20) / 2, "enemyType": "BacuraEnemy", "config": {"width": BACURA_DEFAULT_WIDTH + 20, "speed": 0.2}},
+            { "scrollPos": (2 * this.AREA_LENGTH) - 500, "enemyId": "a2_derota_g_final_L", "spawnX": this.canvas.width / 4 - 20, "initialMapY": (2 * this.AREA_LENGTH) - 500, "enemyType": "DerotaEnemy", "config": { "hp": 4 } },
+            { "scrollPos": (2 * this.AREA_LENGTH) - 500, "enemyId": "a2_derota_g_final_R", "spawnX": this.canvas.width * 3/4 - 20, "initialMapY": (2 * this.AREA_LENGTH) - 500, "enemyType": "DerotaEnemy", "config": { "hp": 4 } },
 
-            { "scrollPos": 3500, "enemyId": "zoshy_ambush_left", "spawnX": 80, "enemyType": "ZoshyEnemy", "config": { "stopY": 180 } },
-            { "scrollPos": 3550, "enemyId": "zoshy_ambush_right", "spawnX": this.canvas.width - 80 - ZOSHY_WIDTH, "enemyType": "ZoshyEnemy", "config": { "stopY": 180 } },
+            // --- Area 3 Entries --- (scrollPos 2 * AREA_LENGTH to 3 * AREA_LENGTH - 1)
+            { "scrollPos": (2 * this.AREA_LENGTH) + 100, "enemyId": "a3_grobda_lead", "spawnX": this.canvas.width / 2 - GROBDA_DEFAULT_WIDTH/2, "initialMapY": (2 * this.AREA_LENGTH) + 100, "enemyType": "GrobdaEnemy", "config": {"hp": 5, "patrolDistance": 80} },
+            { "scrollPos": (2 * this.AREA_LENGTH) + 200, "enemyId": "a3_toroid_escort1", "spawnX": this.canvas.width / 2 - 80, "enemyType": "AirEnemy", "hp": 3 },
+            { "scrollPos": (2 * this.AREA_LENGTH) + 200, "enemyId": "a3_toroid_escort2", "spawnX": this.canvas.width / 2 + 80, "enemyType": "AirEnemy", "hp": 3 },
 
-            // Guard before boss
-            { "scrollPos": DEFAULT_AREA_LENGTH - 700, "enemyId": "bacura_guard", "spawnX": this.canvas.width / 2 - BACURA_DEFAULT_WIDTH / 2, "enemyType": "BacuraEnemy", "config": {"speed": 0.2} },
-            { "scrollPos": DEFAULT_AREA_LENGTH - 500, "enemyId": "derota_g_left", "spawnX": this.canvas.width / 4 - 20, "initialMapY": DEFAULT_AREA_LENGTH - 500, "enemyType": "DerotaEnemy", "config": { "hp": 3 } },
-            { "scrollPos": DEFAULT_AREA_LENGTH - 500, "enemyId": "derota_g_right", "spawnX": this.canvas.width * 3/4 - 20, "initialMapY": DEFAULT_AREA_LENGTH - 500, "enemyType": "DerotaEnemy", "config": { "hp": 3 } },
+            { "scrollPos": (2 * this.AREA_LENGTH) + 400, "enemyId": "a3_domgram_central_strong", "spawnX": this.canvas.width/2 - DOMGRAM_DEFAULT_WIDTH/2, "initialMapY": (2 * this.AREA_LENGTH) + 400, "enemyType": "DomGramEnemy", "config": {"hp": 8, "score": 2500} },
+            { "scrollPos": (2 * this.AREA_LENGTH) + 450, "enemyId": "a3_derota_flank1", "spawnX": this.canvas.width/2 - 100 - DEROTA_DEFAULT_WIDTH, "initialMapY": (2 * this.AREA_LENGTH) + 450, "enemyType": "DerotaEnemy"},
+            { "scrollPos": (2 * this.AREA_LENGTH) + 450, "enemyId": "a3_derota_flank2", "spawnX": this.canvas.width/2 + 100, "initialMapY": (2 * this.AREA_LENGTH) + 450, "enemyType": "DerotaEnemy"},
 
-            // Area 2 Entries: scrollPos from DEFAULT_AREA_LENGTH to 2 * DEFAULT_AREA_LENGTH - 1
-            // Assuming DEFAULT_AREA_LENGTH = 5000, Area 2 is 5000-9999
-            { "scrollPos": DEFAULT_AREA_LENGTH + 100, "enemyId": "a2_toroid_1", "spawnX": this.canvas.width / 2, "enemyType": "AirEnemy", "hp": 2 },
-            { "scrollPos": DEFAULT_AREA_LENGTH + 300, "enemyId": "a2_toroid_2", "spawnX": this.canvas.width / 3, "enemyType": "AirEnemy", "hp": 2 },
-            { "scrollPos": DEFAULT_AREA_LENGTH + 350, "enemyId": "a2_toroid_3", "spawnX": this.canvas.width * 2/3, "enemyType": "AirEnemy", "hp": 2 },
+            { "scrollPos": (2 * this.AREA_LENGTH) + 700, "enemyId": "a3_zoshy_triple1", "spawnX": this.canvas.width * 0.25, "enemyType": "ZoshyEnemy", "config": {"stopY": 100, "hp": 3}},
+            { "scrollPos": (2 * this.AREA_LENGTH) + 750, "enemyId": "a3_zoshy_triple2", "spawnX": this.canvas.width * 0.50, "enemyType": "ZoshyEnemy", "config": {"stopY": 120, "hp": 3}},
+            { "scrollPos": (2 * this.AREA_LENGTH) + 800, "enemyId": "a3_zoshy_triple3", "spawnX": this.canvas.width * 0.75, "enemyType": "ZoshyEnemy", "config": {"stopY": 100, "hp": 3}},
 
-            { "scrollPos": DEFAULT_AREA_LENGTH + 500, "enemyId": "a2_zakato_1", "spawnX": 100, "enemyType": "ZakatoEnemy", "config": { "amplitude": 60, "verticalSpeed": 1.2, "frequency": 0.04 } },
-            { "scrollPos": DEFAULT_AREA_LENGTH + 550, "enemyId": "a2_zakato_2", "spawnX": this.canvas.width - 100 - ZAKATO_DEFAULT_WIDTH, "enemyType": "ZakatoEnemy", "config": { "amplitude": 60, "verticalSpeed": 1.2, "frequency": 0.04 } },
+            { "scrollPos": (2 * this.AREA_LENGTH) + 1000, "enemyId": "a3_bacura_field1", "spawnX": 0, "enemyType": "BacuraEnemy", "config": {"width": this.canvas.width / 3, "speed": 0.4}},
+            { "scrollPos": (2 * this.AREA_LENGTH) + 1050, "enemyId": "a3_bacura_field2", "spawnX": this.canvas.width * 2/3, "enemyType": "BacuraEnemy", "config": {"width": this.canvas.width / 3, "speed": 0.4}},
 
-            { "scrollPos": DEFAULT_AREA_LENGTH + 800, "enemyId": "a2_zoshy_1", "spawnX": this.canvas.width / 2 - ZOSHY_WIDTH / 2, "enemyType": "ZoshyEnemy", "config": { "stopY": 130, "hp": 3 } },
+            { "scrollPos": (2 * this.AREA_LENGTH) + 1300, "enemyId": "a3_zakato_siren1", "spawnX": 0, "enemyType": "ZakatoEnemy", "config": {"amplitude": 80, "frequency": 0.05, "verticalSpeed": 2, "hp": 2}},
+            { "scrollPos": (2 * this.AREA_LENGTH) + 1300, "enemyId": "a3_zakato_siren2", "spawnX": this.canvas.width - ZAKATO_DEFAULT_WIDTH, "enemyType": "ZakatoEnemy", "config": {"amplitude": -80, "initialX": this.canvas.width - ZAKATO_DEFAULT_WIDTH, "frequency": 0.05, "verticalSpeed": 2, "hp": 2}},
 
-            { "scrollPos": DEFAULT_AREA_LENGTH + 1000, "enemyId": "a2_bacura_1", "spawnX": 50, "enemyType": "BacuraEnemy", "config": { "width": 100, "speed": 0.6 } },
-            { "scrollPos": DEFAULT_AREA_LENGTH + 1000, "enemyId": "a2_bacura_2", "spawnX": this.canvas.width - 50 - 100, "enemyType": "BacuraEnemy", "config": { "width": 100, "speed": 0.6 } },
+            { "scrollPos": (2 * this.AREA_LENGTH) + 1600, "enemyId": "a3_grobda_duo1", "spawnX": this.canvas.width * 0.3, "initialMapY": (2*this.AREA_LENGTH)+1600, "enemyType": "GrobdaEnemy", "config": {"patrolDistance": 40}},
+            { "scrollPos": (2 * this.AREA_LENGTH) + 1650, "enemyId": "a3_grobda_duo2", "spawnX": this.canvas.width * 0.7 - GROBDA_DEFAULT_WIDTH, "initialMapY": (2*this.AREA_LENGTH)+1650, "enemyType": "GrobdaEnemy", "config": {"patrolDistance": 40}},
 
-            { "scrollPos": DEFAULT_AREA_LENGTH + 1300, "enemyId": "a2_derota_1", "spawnX": this.canvas.width / 3 - 20, "initialMapY": DEFAULT_AREA_LENGTH + 1300, "enemyType": "DerotaEnemy", "config": {"fireCooldown": 150}},
-            { "scrollPos": DEFAULT_AREA_LENGTH + 1350, "enemyId": "a2_derota_2", "spawnX": this.canvas.width * 2/3 - 20, "initialMapY": DEFAULT_AREA_LENGTH + 1350, "enemyType": "DerotaEnemy", "config": {"fireCooldown": 150}},
+            { "scrollPos": (2 * this.AREA_LENGTH) + 2000, "enemyId": "a3_pyramid_L", "spawnX": 200, "initialMapY": (2*this.AREA_LENGTH)+2000, "enemyType": "PyramidEnemy", "config": { "id": "left" } },
+            { "scrollPos": (2 * this.AREA_LENGTH) + 2000, "enemyId": "a3_pyramid_R", "spawnX": this.canvas.width - 200 - 30, "initialMapY": (2*this.AREA_LENGTH)+2000, "enemyType": "PyramidEnemy", "config": { "id": "right" } },
+            { "scrollPos": (2 * this.AREA_LENGTH) + 2000, "enemyId": "a3_pyramid_M", "spawnX": this.canvas.width / 2 - 15, "initialMapY": (2*this.AREA_LENGTH)+2000, "enemyType": "PyramidEnemy", "config": { "id": "middle" } },
 
-            { "scrollPos": DEFAULT_AREA_LENGTH + 1600, "enemyId": "a2_toroid_line_1", "spawnX": this.canvas.width / 2 - 60, "enemyType": "AirEnemy", "hp": 2 },
-            { "scrollPos": DEFAULT_AREA_LENGTH + 1650, "enemyId": "a2_toroid_line_2", "spawnX": this.canvas.width / 2 - 30, "enemyType": "AirEnemy", "hp": 2 },
-            { "scrollPos": DEFAULT_AREA_LENGTH + 1700, "enemyId": "a2_toroid_line_3", "spawnX": this.canvas.width / 2, "enemyType": "AirEnemy", "hp": 2 },
-            { "scrollPos": DEFAULT_AREA_LENGTH + 1750, "enemyId": "a2_toroid_line_4", "spawnX": this.canvas.width / 2 + 30, "enemyType": "AirEnemy", "hp": 2 },
-            { "scrollPos": DEFAULT_AREA_LENGTH + 1800, "enemyId": "a2_toroid_line_5", "spawnX": this.canvas.width / 2 + 60, "enemyType": "AirEnemy", "hp": 2 },
+            // Guards before Area 3 boss trigger
+            { "scrollPos": (3 * this.AREA_LENGTH) - 800, "enemyId": "a3_domgram_g1", "spawnX": this.canvas.width/2 - DOMGRAM_DEFAULT_WIDTH * 1.5 - 10, "initialMapY": (3 * this.AREA_LENGTH) - 800, "enemyType": "DomGramEnemy", "config": {"hp": 6}},
+            { "scrollPos": (3 * this.AREA_LENGTH) - 800, "enemyId": "a3_domgram_g2", "spawnX": this.canvas.width/2 + DOMGRAM_DEFAULT_WIDTH * 0.5 + 10, "initialMapY": (3 * this.AREA_LENGTH) - 800, "enemyType": "DomGramEnemy", "config": {"hp": 6}},
+            { "scrollPos": (3 * this.AREA_LENGTH) - 600, "enemyId": "a3_grobda_g1", "spawnX": this.canvas.width * 0.25, "initialMapY": (3 * this.AREA_LENGTH) - 600, "enemyType": "GrobdaEnemy", "config": {"hp": 5, "detectionRange": 350}},
+            { "scrollPos": (3 * this.AREA_LENGTH) - 600, "enemyId": "a3_grobda_g2", "spawnX": this.canvas.width * 0.75 - GROBDA_DEFAULT_WIDTH, "initialMapY": (3 * this.AREA_LENGTH) - 600, "enemyType": "GrobdaEnemy", "config": {"hp": 5, "detectionRange": 350}},
+            { "scrollPos": (3 * this.AREA_LENGTH) - 400, "enemyId": "a3_bacura_final", "spawnX": this.canvas.width / 2 - BACURA_DEFAULT_WIDTH / 2, "enemyType": "BacuraEnemy", "config": {"speed": 0.1}},
 
-            { "scrollPos": DEFAULT_AREA_LENGTH + 2000, "enemyId": "a2_zoshy_flank_L", "spawnX": 100, "enemyType": "ZoshyEnemy", "config": { "stopY": 100 } },
-            { "scrollPos": DEFAULT_AREA_LENGTH + 2000, "enemyId": "a2_zoshy_flank_R", "spawnX": this.canvas.width - 100 - ZOSHY_WIDTH, "enemyType": "ZoshyEnemy", "config": { "stopY": 100 } },
-
-            { "scrollPos": DEFAULT_AREA_LENGTH + 2300, "enemyId": "a2_zakato_cross_1", "spawnX": 50, "enemyType": "ZakatoEnemy", "config": { "amplitude": (this.canvas.width/2 - 50 - ZAKATO_DEFAULT_WIDTH), "frequency": 0.02, "verticalSpeed": 0.8 } },
-            { "scrollPos": DEFAULT_AREA_LENGTH + 2350, "enemyId": "a2_zakato_cross_2", "spawnX": this.canvas.width - 50 - ZAKATO_DEFAULT_WIDTH, "enemyType": "ZakatoEnemy", "config": { "amplitude": -(this.canvas.width/2 - 50 - ZAKATO_DEFAULT_WIDTH), "initialX": this.canvas.width - 50 - ZAKATO_DEFAULT_WIDTH, "frequency": 0.02, "verticalSpeed": 0.8 } },
-
-            { "scrollPos": DEFAULT_AREA_LENGTH + 2800, "enemyId": "a2_bacura_wall", "spawnX": this.canvas.width / 2 - (BACURA_DEFAULT_WIDTH + 40)/2 , "enemyType": "BacuraEnemy", "config": { "width": BACURA_DEFAULT_WIDTH + 40, "speed": 0.25 } },
-
-            // Pyramids for Sol Trigger (Area 2) - different sequence or just more pyramids
-            { "scrollPos": DEFAULT_AREA_LENGTH + 3000, "enemyId": "a2_pyramid_A", "spawnX": this.canvas.width / 2 - 15, "initialMapY": DEFAULT_AREA_LENGTH + 3000, "enemyType": "PyramidEnemy", "config": { "id": "middle" } },
-            { "scrollPos": DEFAULT_AREA_LENGTH + 3050, "enemyId": "a2_pyramid_B", "spawnX": 120, "initialMapY": DEFAULT_AREA_LENGTH + 3050, "enemyType": "PyramidEnemy", "config": { "id": "left" } },
-            { "scrollPos": DEFAULT_AREA_LENGTH + 3100, "enemyId": "a2_pyramid_C", "spawnX": this.canvas.width - 120 - 30, "initialMapY": DEFAULT_AREA_LENGTH + 3100, "enemyType": "PyramidEnemy", "config": { "id": "right" } },
-
-            // Guards before Area 2 boss trigger
-            { "scrollPos": 2 * DEFAULT_AREA_LENGTH - 700, "enemyId": "a2_bacura_guard", "spawnX": this.canvas.width / 2 - BACURA_DEFAULT_WIDTH / 2, "enemyType": "BacuraEnemy", "config": {"speed": 0.2} },
-            { "scrollPos": 2 * DEFAULT_AREA_LENGTH - 500, "enemyId": "a2_derota_g_left", "spawnX": this.canvas.width / 4 - 20, "initialMapY": 2 * DEFAULT_AREA_LENGTH - 500, "enemyType": "DerotaEnemy", "config": { "hp": 4 } },
-            { "scrollPos": 2 * DEFAULT_AREA_LENGTH - 500, "enemyId": "a2_derota_g_right", "spawnX": this.canvas.width * 3/4 - 20, "initialMapY": 2 * DEFAULT_AREA_LENGTH - 500, "enemyType": "DerotaEnemy", "config": { "hp": 4 } },
-
-            // End of Area 2
+            // End of Area 3
         ];
         this.nextSpawnIndex = 0;
         this.isGameOverInputRegistered = false;
     }
 
-    update(deltaTime, enemiesArray, canvas, player) {
+    update(deltaTime, enemiesArray, canvas, player, inputManager) {
         if (this.gameState === 'playing') {
+            this.currentFrameCount++;
+
+            if (inputManager) {
+                const frameInputs = inputManager.getActiveGameActions();
+                if (Object.keys(frameInputs).length > 0) {
+                    this.replayData.push({ frame: this.currentFrameCount, inputs: frameInputs });
+                }
+            }
+
             if (!this.isBossActive) {
                 this.currentScrollPos += this.scrollSpeed;
                 const scrollPosInCurrentArea = this.currentScrollPos - ((this.currentArea - 1) * this.AREA_LENGTH);
@@ -174,6 +204,7 @@ export class GameManager {
         if (this.oneUpDisplayTimer > 0) {
             this.oneUpDisplayTimer--;
         }
+        this.effectManager.update();
     }
 
     spawnEnemies(enemiesArray, canvas) {
@@ -199,6 +230,10 @@ export class GameManager {
                 newEnemy = new DerotaEnemy({ x: spawnData.spawnX, y: 0 }, spawnData.enemyId, spawnData.hp || DEROTA_HP, spawnData.score || DEROTA_SCORE, spawnData.initialMapY || spawnData.scrollPos, spawnData.config || {});
             } else if (spawnData.enemyType === "PyramidEnemy") {
                 newEnemy = new PyramidEnemy({ x: spawnData.spawnX, y: 0 }, spawnData.initialMapY || spawnData.scrollPos, spawnData.config.id, spawnData.config);
+            } else if (spawnData.enemyType === "DomGramEnemy") {
+                newEnemy = new DomGramEnemy({ x: spawnData.spawnX, y: 0 }, spawnData.initialMapY || spawnData.scrollPos, spawnData.enemyId, spawnData.config || {});
+            } else if (spawnData.enemyType === "GrobdaEnemy") {
+                newEnemy = new GrobdaEnemy({ x: spawnData.spawnX, y: 0 }, spawnData.initialMapY || spawnData.scrollPos, spawnData.enemyId, spawnData.config || {});
             } else if (spawnData.enemyType === "AndorgenesisCoreEnemy") {
                  console.warn("AndorgenesisCoreEnemy should be spawned via spawnBoss, not timeline directly.");
             } else {
@@ -286,6 +321,7 @@ export class GameManager {
         if (playerLeft < solRight && playerRight > solLeft &&
             playerTop < solBottom && playerBottom > solTop) {
             this.addScore(sol.scoreValue || SOL_SCORE_BONUS);
+            this.effectManager.addEffect('screenFlash', { duration: 15, color: 'rgba(255, 255, 150, 0.6)' });
             sol.collect();
             this.solActive = false;
             this.solObject = null;
@@ -313,15 +349,37 @@ export class GameManager {
         }
     }
 
-    playerDied() {
+    playerDied(player) {
         if (this.gameState !== 'playing') return;
         this.playerLives--;
         if (this.playerLives < 0) {
             this.gameState = 'gameOver';
             this.saveHighScore();
+            if (player) {
+                this.effectManager.addEffect('explosion', {
+                    x: player.position.x,
+                    y: player.position.y,
+                    size: player.width * 1.8,
+                    color: 'red',
+                    duration: 45
+                });
+            }
             console.log("GAME OVER. Final Score:", this.score, "High Score:", this.highScore);
+            console.log("Replay Data Length:", this.replayData.length);
+            if (this.replayData.length > 0) {
+                 console.log("First few replay frames:", JSON.stringify(this.replayData.slice(0, 5)));
+            }
         } else {
-            console.log("Player died. Lives remaining:", this.playerLives);
+            if (player) {
+                 this.effectManager.addEffect('explosion', {
+                    x: player.position.x,
+                    y: player.position.y,
+                    size: player.width * 1.2,
+                    color: 'rgba(220, 220, 255, 0.7)',
+                    duration: 30
+                });
+            }
+            console.log("Player lost a life. Lives remaining:", this.playerLives);
         }
     }
 
@@ -348,6 +406,9 @@ export class GameManager {
         this.pyramidDestructionOrder = [];
         this.solActive = false;
         this.solObject = null;
+
+        this.effectManager.clear();
+        this.poolManager.resetAllPools();
 
         enemiesArray.length = 0;
         if (player) {

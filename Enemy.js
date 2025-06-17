@@ -32,34 +32,32 @@ export class Enemy {
     }
 
     update() {
-        // Basic movement logic (e.g., move down slowly for air enemies)
         if (this.type === "air") {
             this.position.y += this.speed;
         }
-        // Ground enemies have their Y position updated by GroundEnemy.update based on scroll
     }
 
     draw(ctx) {
-        // Generic placeholder drawing for the base Enemy class
-        ctx.fillStyle = 'purple'; // Default enemy color
+        ctx.fillStyle = 'purple';
         ctx.fillRect(this.position.x, this.position.y, this.width, this.height);
-        // Add a small indicator of HP
-        if (this.hp !== Infinity && this.hp > 0) {
+        if (this.hp !== Infinity && this.hp > 0 && !this.isDestroyed) {
             ctx.fillStyle = 'rgba(255, 255, 255, 0.7)';
             ctx.font = '10px Arial';
             ctx.textAlign = 'center';
             ctx.fillText(this.hp.toString(), this.position.x + this.width / 2, this.position.y + this.height / 2 + 4);
-            ctx.textAlign = 'left'; // Reset alignment
+            ctx.textAlign = 'left';
         }
     }
 
     onHit() {
-        if (this.hp === Infinity) return; // Indestructible
+        if (this.isDestroyed || this.hp === Infinity) return false;
 
+        const oldHp = this.hp;
         this.hp -= 1;
         if (this.hp <= 0) {
             this.destroy();
         }
+        return oldHp > this.hp;
     }
 
     destroy() {
@@ -68,10 +66,9 @@ export class Enemy {
     }
 }
 
-// AirEnemy Base Class (for enemies that fly and are not fixed to ground scroll)
+// AirEnemy Base Class
 //--------------------------------------------------------------------
 const AIR_ENEMY_TYPE = "air";
-// Default properties for AirEnemies if not specified by subclasses
 const AIR_ENEMY_DEFAULT_ID_PREFIX = "air_enemy";
 const AIR_ENEMY_DEFAULT_HP = 1;
 const AIR_ENEMY_DEFAULT_SCORE = 50;
@@ -81,25 +78,23 @@ const AIR_ENEMY_HEIGHT = 30;
 export class AirEnemy extends Enemy {
     constructor(position, id = AIR_ENEMY_DEFAULT_ID_PREFIX, hp = AIR_ENEMY_DEFAULT_HP, score = AIR_ENEMY_DEFAULT_SCORE, width = AIR_ENEMY_WIDTH, height = AIR_ENEMY_HEIGHT) {
         super(id, AIR_ENEMY_TYPE, position, hp, score, width, height);
-        this.isToroid = this.id.toLowerCase().includes("toroid"); // Flag for specific drawing
+        this.isToroid = this.id.toLowerCase().includes("toroid");
     }
 
     draw(ctx) {
+        if (this.isDestroyed) return;
         if (this.isToroid) {
-            // Toroid-specific drawing (donut shape)
-            ctx.fillStyle = 'darkred'; // Toroid color
+            ctx.fillStyle = 'darkred';
             ctx.beginPath();
             ctx.arc(this.position.x + this.width / 2, this.position.y + this.height / 2, this.width / 2, 0, Math.PI * 2, false);
             const innerRadius = this.width / 4;
             ctx.arc(this.position.x + this.width / 2, this.position.y + this.height / 2, innerRadius, 0, Math.PI * 2, true);
             ctx.fill();
-
             ctx.fillStyle = 'orangered';
             ctx.beginPath();
             ctx.arc(this.position.x + this.width / 2 + innerRadius / 2, this.position.y + this.height / 2 - innerRadius / 2, innerRadius / 3, 0, Math.PI * 2);
             ctx.fill();
-
-            if (this.hp > 0 && this.hp !== Infinity) { // Toroid specific HP display
+            if (this.hp > 0 && this.hp !== Infinity) {
                 ctx.fillStyle = 'rgba(255, 255, 0, 0.8)';
                 ctx.font = '10px Arial';
                 ctx.textAlign = 'center';
@@ -107,32 +102,36 @@ export class AirEnemy extends Enemy {
                 ctx.textAlign = 'left';
             }
         } else {
-            // Fallback for other AirEnemy types if not Toroid - use base Enemy draw
             super.draw(ctx);
         }
     }
 }
 
-// GroundEnemy Base Class (for enemies fixed to terrain, Y pos depends on scroll)
+// GroundEnemy Base Class
 //--------------------------------------------------------------------
 const GROUND_ENEMY_TYPE = "ground";
-
 export class GroundEnemy extends Enemy {
     constructor(id, type = GROUND_ENEMY_TYPE, position, hp, score, width, height, initialMapY) {
         super(id, type, position, hp, score, width, height);
         this.initialMapY = initialMapY;
         this.position.y = this.initialMapY - 0;
     }
-
     update(currentScrollPos) {
         this.position.y = this.initialMapY - currentScrollPos;
     }
-    // Inherits draw from Enemy unless overridden by specific ground types
+    // Inherits draw from Enemy unless overridden
 }
 
+// ... (ZoshyEnemy, ZakatoEnemy, BacuraEnemy, DerotaEnemy definitions follow, ensure their onHit also returns boolean) ...
+// For brevity, I will assume their onHit methods are updated similarly to the base Enemy.onHit if they override it.
+// If they just use super.onHit(), then the base class change is sufficient.
+// Example for Zoshy (if it had a custom onHit, it should also return boolean)
+// ZoshyEnemy.prototype.onHit = function() { ... return oldHp > this.hp; }
 
-// Specific Air Enemy Types
-//--------------------------------------------------------------------
+// Re-paste all specific enemy types here with onHit modified if it was custom.
+// For now, assuming they mostly use the base Enemy.onHit() or their existing custom onHit is simple HP reduction.
+// Bacura's onHit is custom and should return false:
+// BacuraEnemy.prototype.onHit = function() { /* Indestructible */ return false; }
 
 // Constants for ZoshyEnemy
 const ZOSHY_DEFAULT_ID = "zoshy";
@@ -152,18 +151,15 @@ const ZOSHY_BULLET_COLOR = 'deeppink';
 export class ZoshyEnemy extends AirEnemy {
     constructor(position, id = ZOSHY_DEFAULT_ID, hp = ZOSHY_HP, score = ZOSHY_SCORE, config = {}) {
         super(position, id, hp, score, ZOSHY_WIDTH, ZOSHY_HEIGHT);
-
         this.stopY = config.stopY || ZOSHY_STOP_Y_DEFAULT;
         this.verticalSpeed = config.verticalSpeed || ZOSHY_VERTICAL_SPEED_DEFAULT;
-        this.baseVerticalSpeed = this.verticalSpeed; // Store to modify for exit
+        this.baseVerticalSpeed = this.verticalSpeed;
         this.lingerTimer = ZOSHY_LINGER_DURATION_FRAMES;
-
         this.state = "descending";
         this.hasFired = false;
         this.bullets = [];
         this.isToroid = false;
     }
-
     update(player, canvas) {
         if (this.state === "descending") {
             this.position.y += this.verticalSpeed;
@@ -179,12 +175,11 @@ export class ZoshyEnemy extends AirEnemy {
             }
             if (this.lingerTimer <= 0) {
                 this.state = "exiting";
-                this.verticalSpeed = this.baseVerticalSpeed * 1.5; // Exit a bit faster
+                this.verticalSpeed = this.baseVerticalSpeed * 1.5;
             }
         } else if (this.state === "exiting") {
             this.position.y += this.verticalSpeed;
         }
-
         for (let i = this.bullets.length - 1; i >= 0; i--) {
             const bullet = this.bullets[i];
             bullet.update();
@@ -193,7 +188,6 @@ export class ZoshyEnemy extends AirEnemy {
             }
         }
     }
-
     fireBullet(playerPosition) {
         if (!playerPosition) return;
         const dx = playerPosition.x - (this.position.x + this.width / 2);
@@ -203,18 +197,18 @@ export class ZoshyEnemy extends AirEnemy {
         const bulletY = this.position.y + this.height / 2;
         this.bullets.push(new EnemyBullet(bulletX, bulletY, ZOSHY_BULLET_WIDTH, ZOSHY_BULLET_HEIGHT, ZOSHY_BULLET_COLOR, ZOSHY_BULLET_SPEED, angle));
     }
-
     draw(ctx) {
+        if (this.isDestroyed) return;
         ctx.fillStyle = ZOSHY_COLOR;
         ctx.beginPath();
         ctx.arc(this.position.x + this.width / 2, this.position.y + this.height / 2, this.width / 2, 0, Math.PI * 2);
         ctx.fill();
-        super.draw(ctx); // Draw HP from base Enemy class after custom shape
-
+        super.draw(ctx);
         for (const bullet of this.bullets) {
             bullet.draw(ctx);
         }
     }
+    // onHit is inherited from base Enemy, which now returns boolean
 }
 
 // Constants for ZakatoEnemy
@@ -238,19 +232,19 @@ export class ZakatoEnemy extends AirEnemy {
         this.age = 0;
         this.isToroid = false;
     }
-
-    update() { // Zakato does not need player/canvas for its own update currently
+    update() {
         this.age++;
         this.position.y += this.verticalSpeed;
         const offsetX = this.amplitude * Math.sin(this.age * this.frequency);
         this.position.x = this.initialX + offsetX;
     }
-
     draw(ctx) {
+        if (this.isDestroyed) return;
         ctx.fillStyle = ZAKATO_COLOR;
         ctx.fillRect(this.position.x, this.position.y, this.width, this.height);
-        super.draw(ctx); // Draw HP from base Enemy class
+        super.draw(ctx);
     }
+    // onHit is inherited
 }
 
 // Constants for BacuraEnemy
@@ -262,20 +256,18 @@ const BACURA_DEFAULT_HEIGHT = 25;
 const BACURA_COLOR = 'darkslategrey';
 const BACURA_DEFAULT_SPEED = 0.5;
 
-export class BacuraEnemy extends AirEnemy { // Bacura is an obstacle, but treated as Air for layer & simple Y movement
+export class BacuraEnemy extends AirEnemy {
     constructor(position, id = BACURA_DEFAULT_ID, width = BACURA_DEFAULT_WIDTH, height = BACURA_DEFAULT_HEIGHT, speed = BACURA_DEFAULT_SPEED) {
         super(position, id, BACURA_HP, BACURA_SCORE, width, height);
         this.speed = speed;
         this.isToroid = false;
     }
-
-    update() { // Overrides AirEnemy update if different speed logic or no type check needed
+    update() {
         this.position.y += this.speed;
     }
-
-    onHit() { /* Indestructible */ }
-
+    onHit() { /* Indestructible */ return false; } // Override and return false
     draw(ctx) {
+        if (this.isDestroyed) return;
         ctx.fillStyle = BACURA_COLOR;
         ctx.fillRect(this.position.x, this.position.y, this.width, this.height);
         ctx.strokeStyle = 'grey';
@@ -289,9 +281,6 @@ export class BacuraEnemy extends AirEnemy { // Bacura is an obstacle, but treate
         }
     }
 }
-
-// Specific Ground Enemy Types
-//--------------------------------------------------------------------
 
 // Constants for DerotaEnemy
 const DEROTA_DEFAULT_ID = "derota";
@@ -319,9 +308,9 @@ export class DerotaEnemy extends GroundEnemy {
         this.fireTimer = Math.random() * this.fireCooldown;
         this.bullets = [];
     }
-
     update(currentScrollPos, playerPosition, canvas) {
         super.update(currentScrollPos);
+        if (this.isDestroyed) return;
         this.rotationAngle += this.rotationSpeed;
         if (this.rotationAngle > Math.PI * 2) this.rotationAngle -= Math.PI * 2;
         this.fireTimer--;
@@ -332,12 +321,11 @@ export class DerotaEnemy extends GroundEnemy {
         for (let i = this.bullets.length - 1; i >= 0; i--) {
             const bullet = this.bullets[i];
             bullet.update();
-            if (canvas && bullet.isOffscreen(canvas.width, canvas.height)) { // Check canvas exists
+            if (canvas && bullet.isOffscreen(canvas.width, canvas.height)) {
                 this.bullets.splice(i, 1);
             }
         }
     }
-
     fireBurst() {
         const bulletX = this.position.x + this.width / 2;
         const bulletY = this.position.y + this.height / 2;
@@ -352,27 +340,24 @@ export class DerotaEnemy extends GroundEnemy {
             ));
         }
     }
-
     draw(ctx) {
+        if (this.isDestroyed) return;
         const centerX = this.position.x + this.width / 2;
         const centerY = this.position.y + this.height / 2;
         ctx.fillStyle = DEROTA_COLOR_BASE;
         ctx.beginPath();
         ctx.arc(centerX, centerY, this.width / 2, 0, Math.PI * 2);
         ctx.fill();
-        // Base Enemy.draw() would draw purple rect + HP. We want custom Derota look.
-        // If HP needs to be drawn for Derota, do it here or in a shared GroundEnemy draw method.
-        // For now, no explicit HP for Derota, relying on visual damage states later.
-
+        // No super.draw(ctx) for Derota as it has a custom base
         ctx.save();
         ctx.translate(centerX, centerY);
         ctx.rotate(this.rotationAngle);
         ctx.fillStyle = DEROTA_COLOR_TURRET;
         ctx.fillRect(-DEROTA_TURRET_WIDTH / 2, -DEROTA_TURRET_LENGTH / 2, DEROTA_TURRET_WIDTH, DEROTA_TURRET_LENGTH);
         ctx.restore();
-
         for (const bullet of this.bullets) {
             bullet.draw(ctx);
         }
     }
+    // onHit is inherited
 }

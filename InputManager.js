@@ -273,4 +273,34 @@ export class InputManager {
         }
         return undefined;
     }
+
+    getActiveGameActions() {
+        const activeForReplay = {};
+
+        // Keyboard actions
+        if (this.gameActions.moveUp) activeForReplay.moveUp = true;
+        if (this.gameActions.moveDown) activeForReplay.moveDown = true;
+        if (this.gameActions.moveLeft) activeForReplay.moveLeft = true;
+        if (this.gameActions.moveRight) activeForReplay.moveRight = true;
+        if (this.gameActions.fireZapper) activeForReplay.fireZapper = true;
+        if (this.gameActions.fireBlaster) activeForReplay.fireBlaster = true; // Records if key is held
+
+        // Touch actions that translate to game logic
+        // Player movement from touch is direct position setting, recorded if touch is active.
+        if (this.touchActions.move && this.touchState.isTouching) {
+            activeForReplay.touchMove = true;
+            activeForReplay.touchX = this.touchState.currentX;
+            activeForReplay.touchY = this.touchState.currentY;
+        }
+
+        // For blaster drop via touch:
+        // This flag is set on touchEnd and consumed by getBlasterDropCoordinates in Player.js.
+        // To record it, getActiveGameActions must be called *before* Player.update consumes it.
+        if (this.gameActions.dropBlasterTouch) {
+            activeForReplay.dropBlasterTouch = true;
+            activeForReplay.dropBlasterTouchX = this.gameActions.dropBlasterTouchX;
+        }
+
+        return activeForReplay;
+    }
 }
