@@ -17,6 +17,10 @@ const BLASTER_BOMB_EXPLOSION_RADIUS = 32;
 const BLASTER_BOMB_EXPLOSION_DURATION = 15; // Frames
 const BLASTER_SIGHT_SIZE = 12; // For drawing crosshair
 const BLASTER_SIGHT_DOT_RADIUS = 2;
+const BLASTER_SIGHT_COLLISION_WIDTH = 10; // For checking ground target collision
+const BLASTER_SIGHT_COLLISION_HEIGHT = 10;
+const BLINK_INTERVAL_FRAMES = 2; // Blink every 2 frames (e.g. 1 frame white, 1 frame red)
+
 const FALLING_BOMB_RADIUS = 7;
 
 
@@ -39,6 +43,13 @@ export class Player {
         this.blasterBombs = [];
         this.width = PLAYER_WIDTH;
         this.height = PLAYER_HEIGHT;
+
+        // Blaster sight targeting state
+        this.blasterSightTargetingGroundEnemy = false;
+        this.blasterSightBlinkTimer = 0;
+        this.blasterSightBlinkColor = 'white'; // Default color
+
+        this.blasterKeyHeld = false; // For blaster drop-on-release logic
     }
 
     reset() {
@@ -53,6 +64,10 @@ export class Player {
         // Reset other player-specific states if any (e.g., invulnerability)
         // this.isInvulnerable = false;
         // this.invulnerabilityTimer = 0;
+        this.blasterSightTargetingGroundEnemy = false;
+        this.blasterSightBlinkTimer = 0;
+        this.blasterSightBlinkColor = 'white';
+        this.blasterKeyHeld = false; // Reset blaster key state
         console.log("Player state reset.");
     }
 
@@ -84,19 +99,36 @@ export class Player {
         //   And collision checks in game.js should check !player.isInvulnerable.
     }
 
-    update(inputKeys) {
-        // Movement
-        if (inputKeys['ArrowUp']) {
-            this.position.y -= this.speed;
+    update(inputManager, enemies = []) {
+        // --- Touch Controls ---
+        const touchTargetPos = inputManager.getTouchPlayerTargetPosition();
+        let keyboardMovementActive =
+            inputManager.isActionActive('moveUp') ||
+            inputManager.isActionActive('moveDown') ||
+            inputManager.isActionActive('moveLeft') ||
+            inputManager.isActionActive('moveRight');
+
+        if (touchTargetPos) {
+            // Touch movement overrides keyboard if active
+            this.position.x = touchTargetPos.x;
+            this.position.y = touchTargetPos.y;
+            keyboardMovementActive = false; // Disable keyboard movement if touch is controlling position
         }
-        if (inputKeys['ArrowDown']) {
-            this.position.y += this.speed;
-        }
-        if (inputKeys['ArrowLeft']) {
-            this.position.x -= this.speed;
-        }
-        if (inputKeys['ArrowRight']) {
-            this.position.x += this.speed;
+
+        // --- Keyboard Movement (only if touch movement is not active) ---
+        if (keyboardMovementActive) {
+            if (inputManager.isActionActive('moveUp')) {
+                this.position.y -= this.speed;
+            }
+            if (inputManager.isActionActive('moveDown')) {
+                this.position.y += this.speed;
+            }
+            if (inputManager.isActionActive('moveLeft')) {
+                this.position.x -= this.speed;
+            }
+            if (inputManager.isActionActive('moveRight')) {
+                this.position.x += this.speed;
+            }
         }
 
         // Keep player within canvas bounds (position is center)
@@ -110,19 +142,88 @@ export class Player {
             this.zapperTimer--;
         }
 
-        // Shoot zapper
-        if (inputKeys['z'] || inputKeys['Z']) { // Check for 'z' or 'Z'
+        // Zapper Firing (Keyboard OR Touch Auto-Fire)
+        if (inputManager.isActionActive('fireZapper') || inputManager.shouldAutoFireZapper()) {
             if (this.zapperTimer === 0) {
                 this.shootZapper();
                 this.zapperTimer = this.zapperCooldown;
             }
         }
 
-        // Update blaster sight position
-        this.blasterSightPosition.x = this.position.x;
-        // Keep sight some distance ahead, but within bounds
+        // Blaster Firing Logic (Keyboard: drop on release)
+        if (inputManager.isActionActive('fireBlaster')) {
+            this.blasterKeyHeld = true;
+        } else {
+            if (this.blasterKeyHeld) {
+                this.dropBlaster(); // Uses current blasterSightPosition
+                this.blasterKeyHeld = false;
+            }
+        }
+
+        // Blaster Firing Logic (Touch UI)
+        const blasterDropData = inputManager.getBlasterDropCoordinates();
+        if (blasterDropData !== undefined) {
+            // Align blaster sight X with the tap, Y remains relative to player
+            this.blasterSightPosition.x = blasterDropData.x;
+            // this.blasterSightPosition.y is already updated based on player position
+            this.dropBlaster(); // Then drop bomb using this new sight position
+        }
+
+
+        // Update blaster sight position:
+        // Y always follows player with offset.
+        // X follows player, unless it was just set by a touch-initiated blaster drop.
+        if (blasterDropData === undefined) {
+             this.blasterSightPosition.x = this.position.x;
+        }
+        // If blasterDropData was defined, this.blasterSightPosition.x was already set to blasterDropData.x
+
         this.blasterSightPosition.y = Math.max(0, this.position.y - BLASTER_SIGHT_Y_OFFSET);
 
+
+        // Blaster sight targeting ground enemy logic
+        this.blasterSightTargetingGroundEnemy = false; // Reset each frame
+        const sightRectX = this.blasterSightPosition.x - BLASTER_SIGHT_COLLISION_WIDTH / 2;
+        const sightRectY = this.blasterSightPosition.y - BLASTER_SIGHT_COLLISION_HEIGHT / 2;
+
+        for (const enemy of enemies) {
+            // Check if enemy is a ground type (using instanceof GroundEnemy or a type property)
+            // Assuming GroundEnemy class exists and is imported/available for instanceof check in game.js context.
+            // For Player.js, we might need a more generic way if GroundEnemy class is not directly known.
+            // Let's assume for now that game.js passes enemies, and we can check type or instanceof.
+            // A common way is to check `enemy.type === "ground"`.
+            // For this specific task, we need to ensure GroundEnemy is defined and accessible for instanceof.
+            // Let's assume `enemy.type === "ground"` is a reliable property.
+
+            // To use instanceof, we'd need GroundEnemy to be imported in this file,
+            // or rely on a property like enemy.isGround.
+            // For now, let's assume a property `enemy.type = "ground"` exists for ground enemies.
+            if (enemy.type === "ground" && !enemy.isDestroyed) {
+                if (sightRectX < enemy.position.x + enemy.width &&
+                    sightRectX + BLASTER_SIGHT_COLLISION_WIDTH > enemy.position.x &&
+                    sightRectY < enemy.position.y + enemy.height &&
+                    sightRectY + BLASTER_SIGHT_COLLISION_HEIGHT > enemy.position.y) {
+                    this.blasterSightTargetingGroundEnemy = true;
+                    break;
+                }
+            }
+        }
+
+        if (this.blasterSightTargetingGroundEnemy) {
+            this.blasterSightBlinkTimer++;
+            // Blink every BLINK_INTERVAL_FRAMES: 2 frames red, 2 frames white for a 4 frame cycle.
+            // Or 1 frame red, 1 frame white for a 2 frame cycle.
+            // Requirement: "2 フレーム毎に赤と白で点滅" (blinks red and white every 2 frames)
+            // This means a full cycle is 2 frames. Frame 0: White, Frame 1: Red.
+            if (this.blasterSightBlinkTimer % (BLINK_INTERVAL_FRAMES * 2) < BLINK_INTERVAL_FRAMES) {
+                 this.blasterSightBlinkColor = 'white';
+            } else {
+                 this.blasterSightBlinkColor = 'red';
+            }
+        } else {
+            this.blasterSightBlinkTimer = 0;
+            this.blasterSightBlinkColor = 'white'; // Default non-targeting color
+        }
 
         // Update zappers
         for (let i = this.zappersOnScreen.length - 1; i >= 0; i--) {
@@ -199,11 +300,11 @@ export class Player {
 
 
         // Draw blaster sight (white crosshair with a center dot)
-        // Blaster sight X position is updated in update() to follow player's X center.
-        // Blaster sight Y position is fixed offset from player's Y center.
-        ctx.strokeStyle = 'white';
+        // Color is now dynamic based on targeting ground enemies.
+        ctx.strokeStyle = this.blasterSightBlinkColor;
+        ctx.fillStyle = this.blasterSightBlinkColor; // For the center dot
         ctx.lineWidth = 1;
-        // const sightSize = BLASTER_SIGHT_SIZE; // Already defined as global const
+
         ctx.beginPath();
         // Horizontal line
         ctx.moveTo(this.blasterSightPosition.x - BLASTER_SIGHT_SIZE / 2, this.blasterSightPosition.y);
@@ -212,8 +313,8 @@ export class Player {
         ctx.moveTo(this.blasterSightPosition.x, this.blasterSightPosition.y - BLASTER_SIGHT_SIZE / 2);
         ctx.lineTo(this.blasterSightPosition.x, this.blasterSightPosition.y + BLASTER_SIGHT_SIZE / 2);
         ctx.stroke();
+
         // Center dot
-        ctx.fillStyle = 'white';
         ctx.beginPath();
         ctx.arc(this.blasterSightPosition.x, this.blasterSightPosition.y, BLASTER_SIGHT_DOT_RADIUS, 0, Math.PI * 2);
         ctx.fill();

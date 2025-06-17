@@ -1,6 +1,12 @@
 import { Player } from './Player.js';
-import { AirEnemy } from './Enemy.js'; // Ensure correct path
+// Import all enemy types that GameManager might spawn by string name
+// Import all enemy types that GameManager might spawn by string name
+import { AirEnemy, ZakatoEnemy, BacuraEnemy, ZoshyEnemy, DerotaEnemy, GroundEnemy } from './Enemy.js';
+import { PyramidEnemy } from './PyramidEnemy.js';
+import { SolObject } from './SolObject.js';
+import { AndorgenesisCoreEnemy } from './AndorgenesisCoreEnemy.js';
 import { GameManager } from './GameManager.js';
+import { InputManager } from './InputManager.js';
 
 console.log("Game script loaded!");
 
@@ -8,11 +14,9 @@ const canvas = document.getElementById('gameCanvas');
 const ctx = canvas.getContext('2d');
 
 const gameManager = new GameManager(canvas);
+const inputManager = new InputManager(canvas); // Pass canvas to InputManager
 const player = new Player(canvas);
-let enemies = []; // Managed by game.js, passed to GameManager for spawning
-
-const inputKeys = {};
-let blasterKeyHeld = false;
+let enemies = [];
 
 // Background scrolling elements
 const num_lines = 20; // Number of lines for scrolling effect
@@ -27,35 +31,25 @@ for (let i = 0; i < num_lines; i++) {
     });
 }
 
-
+// Event listener for game restart (can stay here as it's game-state specific)
 document.addEventListener('keydown', (event) => {
-    inputKeys[event.key] = true;
-    if (event.key === 'x' || event.key === 'X') {
-        blasterKeyHeld = true;
-    }
-    // Game restart on Enter if game over
     if (gameManager.gameState === 'gameOver' && event.key === 'Enter' && !gameManager.isGameOverInputRegistered) {
-        gameManager.isGameOverInputRegistered = true; // Prevent multiple immediate restarts
-        gameManager.resetGame(player, enemies, player.zappersOnScreen, player.blasterBombs);
-        // Player state like zappers/bombs arrays are cleared in resetGame by passing them.
+        gameManager.isGameOverInputRegistered = true;
+        gameManager.resetGame(player, enemies);
+        // Player's projectiles are cleared within player.reset() which is called by gameManager.resetGame()
     }
 });
 
-document.addEventListener('keyup', (event) => {
-    inputKeys[event.key] = false;
-    if ((event.key === 'x' || event.key === 'X') && blasterKeyHeld) {
-        player.dropBlaster();
-        blasterKeyHeld = false;
-    }
-});
-
+// Old keydown/keyup listeners that set inputKeys and blasterKeyHeld are removed
+// as InputManager now handles this.
 
 let lastTime = 0;
 function gameLoop(timestamp) {
     const deltaTime = timestamp - lastTime;
     lastTime = timestamp;
 
-    gameManager.update(deltaTime); // Update game manager (scroll position, etc.)
+    // Pass enemies, canvas, and player to gameManager.update
+    gameManager.update(deltaTime, enemies, canvas, player);
 
     if (gameManager.gameState === 'playing') {
         // Clear canvas
@@ -78,17 +72,8 @@ function gameLoop(timestamp) {
         ctx.fillStyle = '#224422'; // Dark green
         for(let i=0; i < line_properties.length; i++) {
             let p = line_properties[i];
-            let yOnScreen = (p.y + gameManager.currentScrollPos * p.speed) % canvas.height;
-             if (gameManager.currentScrollPos * p.speed > p.y_reset_trigger) { // pseudo property
-                 // this logic isn't quite right. Let's use a simpler modulo arithmetic based on scrollPos
-             }
-        }
-        // Corrected simple scrolling background
-        for (let i = 0; i < num_lines; i++) {
-            let p = line_properties[i];
             // Each line has its own 'base' y, and we shift it by scrollPos.
             // The modulo ensures it wraps around.
-            // To make them appear continuously, their effective y needs to be relative to their initial random y.
             let yPos = (p.y + gameManager.currentScrollPos * (p.speed /2) ) % canvas.height;
             ctx.fillRect(p.x, yPos, p.width, p.height);
         }
@@ -96,15 +81,31 @@ function gameLoop(timestamp) {
 
         gameManager.spawnEnemies(enemies, canvas); // Call spawner
 
-        player.update(inputKeys);
+        player.update(inputManager, enemies); // Pass InputManager instance
 
         // Update and draw enemies
         for (let i = enemies.length - 1; i >= 0; i--) {
             const enemy = enemies[i];
-            enemy.update();
 
-            // Remove enemies off-screen (bottom)
-            if (enemy.position.y > canvas.height) {
+        // Update logic for different enemy types
+        if (enemy instanceof AndorgenesisCoreEnemy) {
+            enemy.update(gameManager.currentScrollPos, player, canvas, gameManager);
+        } else if (enemy instanceof PyramidEnemy) {
+            enemy.update(gameManager.currentScrollPos, gameManager); // Pass gameManager for pyramidDestroyed callback
+        } else if (enemy instanceof DerotaEnemy) {
+            enemy.update(gameManager.currentScrollPos, player, canvas);
+        } else if (enemy instanceof GroundEnemy) {
+            enemy.update(gameManager.currentScrollPos);
+        } else if (enemy instanceof ZoshyEnemy) {
+            enemy.update(player, canvas);
+        } else if (enemy instanceof AirEnemy) {
+            enemy.update();
+        } else {
+            enemy.update();
+        }
+
+        // Remove enemies off-screen (top or bottom)
+        if (enemy.position.y > canvas.height || enemy.position.y < -enemy.height) {
                 enemies.splice(i, 1);
                 continue;
             }
@@ -178,8 +179,44 @@ function gameLoop(timestamp) {
                 }
             }
 
+            // Collision: Player vs Enemy Bullets
+            if (enemy.bullets && enemy.bullets.length > 0) {
+                for (let k = enemy.bullets.length - 1; k >= 0; k--) {
+                    const bullet = enemy.bullets[k];
+                    // Basic rectangle collision for player vs bullet
+                    // Player position is center, bullet position is center (as per Bullet.draw)
+                    const playerLeft = player.position.x - player.width / 2;
+                    const playerRight = player.position.x + player.width / 2;
+                    const playerTop = player.position.y - player.height / 2;
+                    const playerBottom = player.position.y + player.height / 2;
+
+                    const bulletLeft = bullet.position.x - bullet.width / 2;
+                    const bulletRight = bullet.position.x + bullet.width / 2;
+                    const bulletTop = bullet.position.y - bullet.height / 2;
+                    const bulletBottom = bullet.position.y + bullet.height / 2;
+
+                    if (playerLeft < bulletRight && playerRight > bulletLeft &&
+                        playerTop < bulletBottom && playerBottom > bulletTop) {
+
+                        player.onHit(); // Player takes a hit
+                        gameManager.playerDied(); // GameManager updates lives/state
+                        enemy.bullets.splice(k, 1); // Remove bullet
+
+                        if (gameManager.gameState === 'gameOver') {
+                            // Break all loops if game over
+                            // This requires breaking from outer enemy loop as well.
+                            // A flag or returning early from gameLoop might be better.
+                            // For now, just break this inner loop.
+                            break;
+                        }
+                    }
+                }
+                if (gameManager.gameState === 'gameOver') break; // Break enemy loop if game over
+            }
+
+
             if (!enemy.isDestroyed) {
-                enemy.draw(ctx);
+                enemy.draw(ctx); // Enemy draws itself and its bullets
             }
         } // End of main enemy loop
 
@@ -187,10 +224,38 @@ function gameLoop(timestamp) {
              // Enemies list will be cleared by resetGame if player restarts.
         } else {
              // Filter out destroyed enemies from the main array
+             // Also, trigger pyramidDestroyed callback here if a pyramid was just destroyed.
+             // This was moved to PyramidEnemy.update() for simplicity with gameManager reference.
              enemies = enemies.filter(enemy => !enemy.isDestroyed);
         }
 
         player.draw(ctx);
+
+    // Draw Sol object if it's active
+    if (gameManager.solActive && gameManager.solObject) {
+        gameManager.solObject.draw(ctx);
+    }
+
+    // Draw Blaster UI Area (visual cue for touch controls)
+    if (inputManager.blasterUiArea && inputManager.blasterUiArea.height > 0) { // Check if area is defined
+        ctx.fillStyle = "rgba(100, 100, 100, 0.2)"; // Semi-transparent grey
+        ctx.fillRect(
+            inputManager.blasterUiArea.x,
+            inputManager.blasterUiArea.y,
+            inputManager.blasterUiArea.width,
+            inputManager.blasterUiArea.height
+        );
+        ctx.fillStyle = "rgba(255, 255, 255, 0.5)"; // Lighter text for the cue
+        ctx.font = "16px Arial";
+        ctx.textAlign = "center";
+        ctx.fillText(
+            "BLASTER ZONE",
+            canvas.width / 2,
+            inputManager.blasterUiArea.y + inputManager.blasterUiArea.height / 2 + 8 // Adjust text position
+        );
+        ctx.textAlign = "left"; // Reset alignment
+    }
+
 
         // Draw Score, Lives, High Score
         ctx.fillStyle = "white";
@@ -199,6 +264,14 @@ function gameLoop(timestamp) {
         ctx.fillText("Lives: " + gameManager.playerLives, canvas.width - 80, 20);
         ctx.fillText("High Score: " + gameManager.highScore, canvas.width / 2 - 60, 20);
 
+        // Display "1UP" message if timer is active
+        if (gameManager.oneUpDisplayTimer > 0) {
+            ctx.fillStyle = "yellow";
+            ctx.font = "bold 24px Arial";
+            ctx.textAlign = "center";
+            ctx.fillText("1UP", canvas.width / 2, canvas.height / 2 - 60); // Positioned above center
+            ctx.textAlign = "left"; // Reset alignment
+        }
 
     } else if (gameManager.gameState === 'gameOver') {
         ctx.fillStyle = 'black';
