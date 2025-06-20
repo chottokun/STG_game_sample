@@ -15,7 +15,7 @@ const canvas = document.getElementById('gameCanvas');
 const ctx = canvas.getContext('2d');
 
 const gameManager = new GameManager(canvas);
-const inputManager = new InputManager(canvas);
+const inputManager = new InputManager(canvas, gameManager.soundManager);
 const player = new Player(canvas, gameManager);
 let enemies = [];
 
@@ -32,20 +32,79 @@ for (let i = 0; i < num_lines; i++) {
 }
 
 document.addEventListener('keydown', (event) => {
-    if (gameManager.gameState === 'gameOver' && event.key === 'Enter' && !gameManager.isGameOverInputRegistered) {
-        gameManager.isGameOverInputRegistered = true;
-        gameManager.resetGame(player, enemies);
+    if (gameManager.gameState === 'gameOver' && event.key === 'Enter') {
+        if (!gameManager.isGameOverInputRegistered) {
+            gameManager.isGameOverInputRegistered = true;
+            gameManager.resetGame(player, enemies);
+        }
+    }
+    // TEMP: Hardcoded replay trigger (press 'R' key)
+    if (event.key === 'r' || event.key === 'R') {
+        if (gameManager.replayData.length > 1 && !gameManager.isReplayMode && gameManager.gameState !== 'playing') { // Ensure there's more than just seed & not already in replay or active game
+            console.log("Attempting to start replay...");
+            const replayToPlay = { data: JSON.parse(JSON.stringify(gameManager.replayData)) };
+            gameManager.startReplay(replayToPlay, player, enemies);
+        } else if (gameManager.isReplayMode) {
+            console.log("Replay is already active or finishing.");
+        } else if (gameManager.gameState === 'playing' && !gameManager.isReplayMode) {
+             console.log("Cannot start replay while a game is in progress. Game Over or return to Title first.");
+        }
+         else {
+            console.log("No replay data recorded to play (or only seed entry exists).");
+        }
     }
 });
+
+const initialTouchUnlock = () => {
+    if (gameManager.soundManager && !gameManager.soundManager.audioUnlocked) {
+        gameManager.soundManager.unlockAudioContext();
+    }
+    canvas.removeEventListener('touchstart', initialTouchUnlock);
+};
+canvas.addEventListener('touchstart', initialTouchUnlock, { once: true });
+
 
 let lastTime = 0;
 function gameLoop(timestamp) {
     const deltaTime = timestamp - lastTime;
     lastTime = timestamp;
 
+    if (inputManager.isActionJustPressed('togglePauseAction') &&
+        (gameManager.gameState === 'playing' || gameManager.gameState === 'paused')) { // Allow pause only if playing or already paused
+        gameManager.togglePause();
+    }
+
     gameManager.update(deltaTime, enemies, canvas, player, inputManager);
 
-    if (gameManager.gameState === 'playing') {
+    if (gameManager.gameState === 'titleScreen') {
+        ctx.fillStyle = 'black';
+        ctx.fillRect(0, 0, canvas.width, canvas.height);
+        ctx.fillStyle = 'white';
+        ctx.font = 'bold 48px Arial';
+        ctx.textAlign = 'center';
+        ctx.fillText('Xevious Clone', canvas.width / 2, canvas.height / 3 - 20);
+        ctx.font = '28px Arial';
+        ctx.fillText('Press Enter or "S" to Start', canvas.width / 2, canvas.height / 2 + 20);
+        ctx.fillStyle = 'yellow';
+        ctx.font = 'bold 22px Arial';
+        ctx.fillText('High Score: ' + gameManager.highScore, canvas.width / 2, canvas.height / 2 + 70);
+        ctx.font = '18px Arial';
+        ctx.fillStyle = 'lightgrey';
+        ctx.fillText('Press "R" to Play Last Recording (if available)', canvas.width / 2, canvas.height / 2 + 110);
+
+        ctx.textAlign = 'left';
+        ctx.fillStyle = 'white';
+
+        if (inputManager.isActionJustPressed('startGameAction')) {
+            gameManager.resetGame(player, enemies);
+            player.reset();
+            enemies.length = 0;
+            gameManager.startGame(player, enemies);
+            gameManager.isGameOverInputRegistered = false;
+        }
+
+    } else if (gameManager.gameState === 'playing') {
+        // ... (rest of the 'playing' state logic from Turn 58 - remains unchanged)
         ctx.fillStyle = 'black';
         ctx.fillRect(0, 0, canvas.width, canvas.height);
 
@@ -87,82 +146,77 @@ function gameLoop(timestamp) {
                 continue;
             }
 
-            const enemyWasInitiallyAlive = !enemy.isDestroyed;
-
-            // --- Player Weapon Collisions (only if player is active and not invincible) ---
-            // Zappers vs Enemies (Main Body)
-            for (let j = player.zappersOnScreen.length - 1; j >= 0; j--) {
-                const zapper = player.zappersOnScreen[j];
-                if (!zapper.isActiveInPool || !enemyWasInitiallyAlive) continue;
-
-                if (zapper.position.x - zapper.width/2 < enemy.position.x + enemy.width &&
-                    zapper.position.x + zapper.width/2 > enemy.position.x &&
-                    zapper.position.y - zapper.height/2 < enemy.position.y + enemy.height &&
-                    zapper.position.y + zapper.height/2 > enemy.position.y) {
-
-                    const enemyTookDamage = enemy.onHit();
-                    gameManager.poolManager.returnObject(zapper, 'zapperBullet');
-                    player.zappersOnScreen.splice(j, 1);
-
-                    if (enemyTookDamage && !enemy.isDestroyed && enemyWasInitiallyAlive) {
-                        gameManager.effectManager.addEffect('hitSpark', { x: zapper.position.x, y: zapper.position.y, size: 8, color: 'yellow', duration: 8 });
+            if (player.isActive && !player.isInvincible) {
+                const enemyWasInitiallyAlive = !enemy.isDestroyed;
+                // Zappers vs Enemies
+                for (let j = player.zappersOnScreen.length - 1; j >= 0; j--) {
+                    const zapper = player.zappersOnScreen[j];
+                    if (!zapper.isActiveInPool) continue;
+                    if (zapper.position.x - zapper.width/2 < enemy.position.x + enemy.width &&
+                        zapper.position.x + zapper.width/2 > enemy.position.x &&
+                        zapper.position.y - zapper.height/2 < enemy.position.y + enemy.height &&
+                        zapper.position.y + zapper.height/2 > enemy.position.y) {
+                        const enemyWasAliveForThisHit = !enemy.isDestroyed;
+                        const enemyTookDamage = enemy.onHit();
+                        gameManager.poolManager.returnObject(zapper, 'zapperBullet');
+                        player.zappersOnScreen.splice(j, 1);
+                        if (enemyTookDamage && !enemy.isDestroyed && enemyWasAliveForThisHit) {
+                            gameManager.effectManager.addEffect('hitSpark', { x: zapper.position.x, y: zapper.position.y, size: 8, color: 'yellow', duration: 8 });
+                        }
+                        if (enemyWasAliveForThisHit && enemy.isDestroyed) {
+                            gameManager.addScore(enemy.scoreValue);
+                            gameManager.effectManager.addEffect('explosion', { x: enemy.position.x + enemy.width/2, y: enemy.position.y + enemy.height/2, size: Math.max(enemy.width, enemy.height) * 0.9, color: 'orange', duration: 15 });
+                            gameManager.soundManager.playSound('enemyExplosion', 0.4);
+                        }
+                        break;
                     }
-                    if (enemyWasInitiallyAlive && enemy.isDestroyed) {
-                        gameManager.addScore(enemy.scoreValue);
-                        gameManager.effectManager.addEffect('explosion', { x: enemy.position.x + enemy.width/2, y: enemy.position.y + enemy.height/2, size: Math.max(enemy.width, enemy.height) * 0.9, color: 'orange', duration: 15 });
-                    }
-                    break;
                 }
-            }
 
-            // Blaster Bombs vs Enemies (Main Body)
-            if (!enemy.isDestroyed && enemyWasInitiallyAlive) {
-                for (const bomb of player.blasterBombs) {
-                    if (bomb.explosionTimer > 0) {
-                        const bombCenterX = bomb.x;
-                        const bombCenterY = bomb.y;
-                        const closestX = Math.max(enemy.position.x, Math.min(bombCenterX, enemy.position.x + enemy.width));
-                        const closestY = Math.max(enemy.position.y, Math.min(bombCenterY, enemy.position.y + enemy.height));
-                        const distanceSquared = ((bombCenterX - closestX) ** 2) + ((bombCenterY - closestY) ** 2);
-
-                        if (distanceSquared < (bomb.explosionRadius * bomb.explosionRadius)) {
-                            const enemyWasAlivePreBomb = !enemy.isDestroyed;
-                            const tookDamage = enemy.onHit();
-                            if (tookDamage && !enemy.isDestroyed && enemyWasAlivePreBomb) {
-                                gameManager.effectManager.addEffect('hitSpark', { x: enemy.position.x + enemy.width/2, y: enemy.position.y + enemy.height/2, size: 12, color: 'white', duration: 10 });
-                            }
-                            if (enemyWasAlivePreBomb && enemy.isDestroyed) {
-                                gameManager.addScore(enemy.scoreValue);
-                                gameManager.effectManager.addEffect('explosion', { x: enemy.position.x + enemy.width/2, y: enemy.position.y + enemy.height/2, size: Math.max(enemy.width, enemy.height), color: 'darkorange', duration: 20 });
+                // Blaster Bombs vs Enemies
+                if (!enemy.isDestroyed && enemyWasInitiallyAlive) {
+                    for (const bomb of player.blasterBombs) {
+                        if (bomb.explosionTimer > 0) {
+                            const bombCenterX = bomb.x;
+                            const bombCenterY = bomb.y;
+                            const closestX = Math.max(enemy.position.x, Math.min(bombCenterX, enemy.position.x + enemy.width));
+                            const closestY = Math.max(enemy.position.y, Math.min(bombCenterY, enemy.position.y + enemy.height));
+                            const distanceSquared = ((bombCenterX - closestX) ** 2) + ((bombCenterY - closestY) ** 2);
+                            if (distanceSquared < (bomb.explosionRadius * bomb.explosionRadius)) {
+                                const enemyWasAlivePreBomb = !enemy.isDestroyed;
+                                const tookDamage = enemy.onHit();
+                                if (tookDamage && !enemy.isDestroyed && enemyWasAlivePreBomb) {
+                                    gameManager.effectManager.addEffect('hitSpark', { x: enemy.position.x + enemy.width/2, y: enemy.position.y + enemy.height/2, size: 12, color: 'white', duration: 10 });
+                                }
+                                if (enemyWasAlivePreBomb && enemy.isDestroyed) {
+                                    gameManager.addScore(enemy.scoreValue);
+                                    gameManager.effectManager.addEffect('explosion', { x: enemy.position.x + enemy.width/2, y: enemy.position.y + enemy.height/2, size: Math.max(enemy.width, enemy.height), color: 'darkorange', duration: 20 });
+                                    gameManager.soundManager.playSound('enemyExplosion', 0.4);
+                                }
                             }
                         }
                     }
                 }
-            }
 
-            // --- Player Collisions (only if player is active and not invincible) ---
-            if (player.isActive && !player.isInvincible) {
                 // Player vs Enemy Body
                 if (!enemy.isDestroyed && enemyWasInitiallyAlive) {
                     const playerRect = {x: player.position.x - player.width/2, y: player.position.y - player.height/2, width: player.width, height: player.height};
                     const enemyRect = {x: enemy.position.x, y: enemy.position.y, width: enemy.width, height: enemy.height};
                     if (playerRect.x < enemyRect.x + enemyRect.width && playerRect.x + playerRect.width > enemyRect.x &&
                         playerRect.y < enemyRect.y + enemyRect.height && playerRect.y + playerRect.height > enemyRect.y) {
-
                         player.onHit();
                         gameManager.playerDied(player);
-
                         const enemyWasAlivePrePlayerCollision = !enemy.isDestroyed;
                         enemy.onHit();
                         if (enemyWasAlivePrePlayerCollision && enemy.isDestroyed) {
                              gameManager.addScore(enemy.scoreValue);
                              gameManager.effectManager.addEffect('explosion', { x: enemy.position.x + enemy.width/2, y: enemy.position.y + enemy.height/2, size: Math.max(enemy.width, enemy.height) * 0.8, color: 'red' });
+                             gameManager.soundManager.playSound('enemyExplosion', 0.3);
                         }
                         if (gameManager.gameState === 'gameOver') break;
                     }
                 }
 
-                // Player vs Enemy Bullets (from main enemy AND its turrets)
+                // Player vs Enemy Bullets
                 let allEnemyBullets = [];
                 if (enemy.bullets && enemy.bullets.length > 0) {
                     allEnemyBullets = allEnemyBullets.concat(enemy.bullets);
@@ -174,14 +228,11 @@ function gameLoop(timestamp) {
                         }
                     }
                 }
-
                 for (let k = allEnemyBullets.length - 1; k >= 0; k--) {
                     const bullet = allEnemyBullets[k];
                     if (bullet.isActive === false) continue;
-
                     const playerRect = {x: player.position.x - player.width/2, y: player.position.y - player.height/2, width: player.width, height: player.height};
                     const bulletRect = {x: bullet.position.x - bullet.width/2, y: bullet.position.y - bullet.height/2, width: bullet.width, height: bullet.height};
-
                     if (playerRect.x < bulletRect.x + bulletRect.width && playerRect.x + playerRect.width > bulletRect.x &&
                         playerRect.y < bulletRect.y + bulletRect.height && playerRect.y + playerRect.height > bulletRect.y) {
                         player.onHit();
@@ -191,15 +242,13 @@ function gameLoop(timestamp) {
                     }
                 }
                 if (gameManager.gameState === 'gameOver') break;
-            } // End of player.isActive && !player.isInvincible block
+            }
 
-            // --- Andorgenesis Turret Weapon Collisions (can happen even if player is invincible) ---
+            // Andorgenesis Turret Weapon Collisions
             if (enemy instanceof AndorgenesisCoreEnemy && enemy.turrets) {
                 for (const turret of enemy.turrets) {
                     if (!turret.isDestroyed) {
                         const turretWasInitiallyAlive = !turret.isDestroyed;
-
-                        // Zappers vs Turrets
                         for (let j = player.zappersOnScreen.length - 1; j >= 0; j--) {
                             const zapper = player.zappersOnScreen[j];
                             if (!zapper.isActiveInPool) continue;
@@ -216,13 +265,12 @@ function gameLoop(timestamp) {
                                 if (turretWasInitiallyAlive && turret.isDestroyed) {
                                     gameManager.addScore(turret.scoreValue);
                                     gameManager.effectManager.addEffect('explosion', { x: turret.position.x + turret.width/2, y: turret.position.y + turret.height/2, size: turret.width, color: 'orange', duration: 15 });
+                                    gameManager.soundManager.playSound('enemyExplosion', 0.3);
                                 }
                                 break;
                             }
                         }
                         if (turret.isDestroyed && turretWasInitiallyAlive && !turret.isDyingWithBoss) continue;
-
-                        // Blaster Bombs vs Turrets
                         for (const bomb of player.blasterBombs) {
                             if (bomb.explosionTimer > 0) {
                                 const bombCenterX = bomb.x;
@@ -239,15 +287,15 @@ function gameLoop(timestamp) {
                                     if (turretWasAlivePreBomb && turret.isDestroyed) {
                                         gameManager.addScore(turret.scoreValue);
                                         gameManager.effectManager.addEffect('explosion', { x: turret.position.x + turret.width/2, y: turret.position.y + turret.height/2, size: turret.width, color: 'orange', duration: 15 });
+                                        gameManager.soundManager.playSound('enemyExplosion', 0.3);
                                     }
                                 }
                             }
                         }
                     }
                 }
-            } // End of Andorgenesis Turret Collisions
+            }
 
-            // Filter inactive bullets from their original arrays (after all collision checks for this enemy/turrets)
             if (enemy.bullets) {
                 enemy.bullets = enemy.bullets.filter(b => b.isActive !== false);
             }
@@ -261,12 +309,6 @@ function gameLoop(timestamp) {
             if (!enemy.isDestroyed) {
                 enemy.draw(ctx);
             }
-        }
-
-        if (gameManager.gameState === 'gameOver') {
-            // Game over state handled below
-        } else {
-             enemies = enemies.filter(enemy => !enemy.isDestroyed);
         }
 
         player.draw(ctx);
@@ -310,17 +352,33 @@ function gameLoop(timestamp) {
             ctx.textAlign = "left";
         }
 
+    } else if (gameManager.gameState === 'paused') {
+        ctx.fillStyle = "rgba(0, 0, 0, 0.5)";
+        ctx.fillRect(0, 0, canvas.width, canvas.height);
+        ctx.fillStyle = "white";
+        ctx.font = "48px Arial";
+        ctx.textAlign = "center";
+        ctx.fillText("Paused", canvas.width / 2, canvas.height / 2);
+        ctx.font = "24px Arial";
+        ctx.fillText("Press P to Resume", canvas.width/2, canvas.height/2 + 40);
+        ctx.textAlign = "left";
+
     } else if (gameManager.gameState === 'gameOver') {
         ctx.fillStyle = 'black';
         ctx.fillRect(0, 0, canvas.width, canvas.height);
         ctx.fillStyle = "red";
-        ctx.font = "48px Arial";
+        ctx.font = "bold 48px Arial";
         ctx.textAlign = "center";
-        ctx.fillText("GAME OVER", canvas.width / 2, canvas.height / 2 - 40);
+        ctx.fillText("GAME OVER", canvas.width / 2, canvas.height / 2 - 80);
         ctx.fillStyle = "white";
         ctx.font = "24px Arial";
-        ctx.fillText("Final Score: " + gameManager.score, canvas.width / 2, canvas.height / 2);
-        ctx.fillText("Press Enter to Restart", canvas.width / 2, canvas.height / 2 + 40);
+        ctx.fillText("Final Score: " + gameManager.score, canvas.width / 2, canvas.height / 2 - 20);
+        ctx.fillStyle = 'yellow';
+        ctx.font = 'bold 22px Arial';
+        ctx.fillText("High Score: " + gameManager.highScore, canvas.width / 2, canvas.height / 2 + 20);
+        ctx.fillStyle = "white";
+        ctx.font = "20px Arial";
+        ctx.fillText("Press Enter to Return to Title Screen", canvas.width / 2, canvas.height / 2 + 70);
         ctx.textAlign = "left";
 
         gameManager.effectManager.draw(ctx);

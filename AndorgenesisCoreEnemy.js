@@ -10,16 +10,24 @@ const CORE_WIDTH = 120;
 const CORE_HEIGHT = 120;
 const CORE_COLOR_BODY = 'darkslateblue';
 const CORE_COLOR_EYE = 'crimson';
+const CORE_COLOR_EYE_PHASE2 = 'orangered';
 const INITIAL_ENTRY_ANIM_TIMER = 120;
 const CORE_DEATH_ANIM_DURATION = 180;
 const EXPLOSION_PARTICLE_COUNT = 20;
 
 // Attack parameters
-const CORE_ATTACK_COOLDOWN = 120;
+const CORE_ATTACK_COOLDOWN_PHASE1 = 120;
+const CORE_ATTACK_COOLDOWN_PHASE2 = 80;
 const CORE_BULLET_SPEED = 3.5;
 const CORE_BULLET_WIDTH = 12;
 const CORE_BULLET_HEIGHT = 12;
 const CORE_BULLET_COLOR = 'magenta';
+const SPREAD_ANGLE = Math.PI / 15;
+
+const CORE_FAST_BULLET_SPEED = 5.0;
+const CORE_FAST_BULLET_WIDTH = 10;
+const CORE_FAST_BULLET_HEIGHT = 10;
+const CORE_FAST_BULLET_COLOR = 'yellow';
 
 export class AndorgenesisCoreEnemy extends GroundEnemy {
     constructor(position, initialMapY, config = {}) {
@@ -40,7 +48,9 @@ export class AndorgenesisCoreEnemy extends GroundEnemy {
         this.deathAnimTimer = CORE_DEATH_ANIM_DURATION;
         this.explosionParticles = [];
 
-        this.attackTimer = Math.random() * CORE_ATTACK_COOLDOWN;
+        this.phase = 1;
+        this.turretsDestroyedCount = 0;
+        this.attackTimer = Math.random() * CORE_ATTACK_COOLDOWN_PHASE1;
         this.bullets = [];
 
         this.turrets = [];
@@ -51,7 +61,7 @@ export class AndorgenesisCoreEnemy extends GroundEnemy {
 
     update(currentScrollPos, playerPosition, canvas, gameManager) {
         super.update(currentScrollPos);
-        if (this.isDestroyed) return; // Already fully destroyed, no updates.
+        if (this.isDestroyed && this.state !== 'dying') return;
 
         switch (this.state) {
             case "entering":
@@ -68,7 +78,7 @@ export class AndorgenesisCoreEnemy extends GroundEnemy {
                     this.attackTimer--;
                     if (this.attackTimer <= 0) {
                         this.fireBullet(playerPosition, canvas);
-                        this.attackTimer = CORE_ATTACK_COOLDOWN;
+                        this.attackTimer = (this.phase === 1) ? CORE_ATTACK_COOLDOWN_PHASE1 : CORE_ATTACK_COOLDOWN_PHASE2;
                     }
                 }
                 break;
@@ -111,43 +121,65 @@ export class AndorgenesisCoreEnemy extends GroundEnemy {
             }
         }
         for (const turret of this.turrets) {
-             // Turret update logic now checks boss state internally
             turret.update(playerPosition, canvas);
         }
     }
 
     turretDestroyed(turret) {
         console.log(`Boss notified: ${turret.id} destroyed.`);
-        const allTurretsDestroyed = this.turrets.every(t => t.isDestroyed);
-        if (allTurretsDestroyed) {
-            console.log("All Andorgenesis turrets destroyed!");
+        this.turretsDestroyedCount++;
+
+        if (this.phase === 1 && this.turretsDestroyedCount >= this.turrets.length) {
+            this.phase = 2;
+            console.log("All turrets destroyed! Andorgenesis Core entering Phase 2!");
+            this.attackTimer = CORE_ATTACK_COOLDOWN_PHASE2 / 2;
         }
     }
 
     fireBullet(playerPosition, canvas) {
         const bulletX = this.position.x + this.width / 2;
         const bulletY = this.position.y + this.height / 2;
-        const angle = Math.atan2(playerPosition.y - bulletY, playerPosition.x - bulletX);
-        this.bullets.push(new EnemyBullet(
-            bulletX, bulletY,
-            CORE_BULLET_WIDTH, CORE_BULLET_HEIGHT,
-            CORE_BULLET_COLOR, CORE_BULLET_SPEED, angle
-        ));
+        const centerAngle = Math.atan2(playerPosition.y - bulletY, playerPosition.x - bulletX);
+
+        if (this.phase === 1) {
+            this.bullets.push(new EnemyBullet(
+                bulletX, bulletY,
+                CORE_BULLET_WIDTH, CORE_BULLET_HEIGHT,
+                CORE_BULLET_COLOR, CORE_BULLET_SPEED, centerAngle
+            ));
+        } else { // Phase 2: 3-way spread shot + one fast aimed shot
+            const angles = [centerAngle - SPREAD_ANGLE, centerAngle, centerAngle + SPREAD_ANGLE];
+            for (const angle of angles) {
+                this.bullets.push(new EnemyBullet(
+                    bulletX, bulletY,
+                    CORE_BULLET_WIDTH, CORE_BULLET_HEIGHT,
+                    CORE_BULLET_COLOR,
+                    CORE_BULLET_SPEED,
+                    angle
+                ));
+            }
+            // Add the additional fast, aimed bullet
+            this.bullets.push(new EnemyBullet(
+                bulletX, bulletY,
+                CORE_FAST_BULLET_WIDTH, CORE_FAST_BULLET_HEIGHT,
+                CORE_FAST_BULLET_COLOR,
+                CORE_FAST_BULLET_SPEED,
+                centerAngle
+            ));
+        }
     }
 
     onHit() {
         if (this.state !== "active" || this.isDestroyed) return false;
-
         const oldHp = this.hp;
         this.hp--;
-
         if (this.hp <= 0 && oldHp > 0 && this.state !== "dying") {
             this.state = "dying";
             this.deathAnimTimer = CORE_DEATH_ANIM_DURATION;
             this.explosionParticles = [];
             console.log("Andorgenesis Core is dying!");
             for (const turret of this.turrets) {
-                if (!turret.isDestroyed) { // Check if not already destroyed
+                if (!turret.isDestroyed) {
                     turret.startDyingWithBoss();
                 }
             }
@@ -156,10 +188,9 @@ export class AndorgenesisCoreEnemy extends GroundEnemy {
     }
 
     draw(ctx) {
-        if (this.isDestroyed && this.state !== 'dying') return; // Don't draw if fully destroyed and not in death anim
+        if (this.isDestroyed && this.state !== 'dying') return;
 
         ctx.save();
-
         if (this.state === "entering") {
             ctx.globalAlpha = this.currentAlpha;
         } else if (this.state === "dying") {
@@ -176,24 +207,34 @@ export class AndorgenesisCoreEnemy extends GroundEnemy {
         ctx.fillRect(this.position.x, this.position.y, this.width, this.height);
 
         const eyeRadius = this.width / 4;
-        ctx.fillStyle = (this.state === 'dying' && Math.floor(this.deathAnimTimer / 5) % 2 === 0) ? 'darkred' : CORE_COLOR_EYE;
+        let eyeColor = (this.phase === 2 && this.state === 'active') ? CORE_COLOR_EYE_PHASE2 : CORE_COLOR_EYE;
+        if (this.state === 'dying') {
+            eyeColor = (Math.floor(this.deathAnimTimer / 5) % 2 === 0) ? 'darkred' : 'black';
+        }
+        ctx.fillStyle = eyeColor;
         ctx.beginPath();
         ctx.arc(this.position.x + this.width / 2, this.position.y + this.height / 2, eyeRadius, 0, Math.PI * 2);
         ctx.fill();
 
-        const currentEffectAlpha = (this.state === "entering") ? this.currentAlpha : 1.0;
-        if (this.state === 'active' || (this.state === 'entering' && this.currentAlpha > 0.1)) {
-            const hpPercentage = Math.max(0, this.hp / CORE_HP);
+        let hpBarOverallAlpha = 1.0;
+        if (this.state === "entering") hpBarOverallAlpha = this.currentAlpha;
+        else if (this.state === "dying") hpBarOverallAlpha = Math.max(0, (this.deathAnimTimer / CORE_DEATH_ANIM_DURATION));
+
+
+        if ((this.state === 'active' || (this.state === 'entering' && this.currentAlpha > 0.1) || this.state === 'dying') && this.hp > 0) {
+            const maxHpForBar = CORE_HP;
+            const hpPercentage = Math.max(0, this.hp / maxHpForBar);
             const hpBarWidth = this.width * 0.8;
             const hpBarHeight = 10;
             const currentHpWidth = hpBarWidth * hpPercentage;
-            ctx.fillStyle = `rgba(128, 128, 128, ${currentEffectAlpha * 0.7})`;
+
+            ctx.fillStyle = `rgba(128, 128, 128, ${hpBarOverallAlpha * 0.7})`;
             ctx.fillRect(this.position.x + (this.width - hpBarWidth)/2, this.position.y - hpBarHeight - 5, hpBarWidth, hpBarHeight);
-            ctx.fillStyle = `rgba(0, 255, 0, ${currentEffectAlpha})`;
+            ctx.fillStyle = `rgba(0, 255, 0, ${hpBarOverallAlpha})`;
             ctx.fillRect(this.position.x + (this.width - hpBarWidth)/2, this.position.y - hpBarHeight - 5, currentHpWidth, hpBarHeight);
         }
 
-        ctx.restore(); // Restore global alpha for subsequent drawings (turrets, bullets)
+        ctx.restore();
 
         if (this.state === "dying") {
             this.explosionParticles.forEach(p => {
@@ -208,13 +249,9 @@ export class AndorgenesisCoreEnemy extends GroundEnemy {
             bullet.draw(ctx);
         }
         for (const turret of this.turrets) {
-            // Turrets manage their own visibility when boss is dying via startDyingWithBoss
-            // Or if core's main draw method applies an alpha, that might affect them too.
-            // For now, turrets draw themselves if not independently destroyed or boss isn't making them fade.
              if (this.state === "dying") {
                  ctx.save();
-                 // Turrets fade with boss, ensure alpha doesn't go negative
-                 ctx.globalAlpha = Math.max(0, (this.deathAnimTimer / CORE_DEATH_ANIM_DURATION) * this.currentAlpha);
+                 ctx.globalAlpha = Math.max(0, (this.deathAnimTimer / CORE_DEATH_ANIM_DURATION));
                  turret.draw(ctx);
                  ctx.restore();
             } else {

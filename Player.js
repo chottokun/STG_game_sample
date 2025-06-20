@@ -7,7 +7,7 @@ const PLAYER_HEIGHT = 30;
 
 const ZAPPER_COOLDOWN_FRAMES = 10;
 const MAX_ZAPPERS_ON_SCREEN = 3;
-const ZAPPER_HEIGHT_FOR_OFFSET = 10; // Used for spawn calculation
+const ZAPPER_HEIGHT_FOR_OFFSET = 10;
 const ZAPPER_SPAWN_OFFSET_Y = 10;
 
 const BLASTER_SIGHT_Y_OFFSET = 100;
@@ -20,8 +20,8 @@ const BLASTER_SIGHT_COLLISION_WIDTH = 10;
 const BLASTER_SIGHT_COLLISION_HEIGHT = 10;
 const BLINK_INTERVAL_FRAMES = 2;
 
-const INVINCIBILITY_DURATION_FRAMES = 180; // 3 seconds at 60fps
-const RESPAWN_DELAY_FRAMES = 60; // 1 second before reappearing
+const INVINCIBILITY_DURATION_FRAMES = 180;
+const RESPAWN_DELAY_FRAMES = 60;
 
 const FALLING_BOMB_RADIUS = 7;
 
@@ -31,6 +31,7 @@ export class Player {
         this.canvas = canvas;
         this.gameManager = gameManager;
         this.poolManager = gameManager.poolManager;
+        this.soundManager = gameManager.soundManager;
 
         this.initialX = canvas.width * PLAYER_INITIAL_X_FACTOR;
         this.initialY = canvas.height - PLAYER_INITIAL_Y_OFFSET;
@@ -93,7 +94,19 @@ export class Player {
         this.isInvincible = true;
         this.invincibilityTimer = INVINCIBILITY_DURATION_FRAMES;
         this.position = { x: this.initialX, y: this.initialY };
-        console.log("Player respawned and is invincible.");
+    }
+
+    toggleInvincibilityDebug() {
+        this.isInvincible = !this.isInvincible;
+        if (this.isInvincible) {
+            this.invincibilityTimer = 999999; // A very large number for "infinite" debug invincibility
+            this.isActive = true; // Ensure player is active if becoming invincible this way
+            this.respawnTimer = 0; // Stop any respawn countdown
+            console.log("Player Invincibility: ON (Debug)");
+        } else {
+            this.invincibilityTimer = 0; // Turn off immediately
+            console.log("Player Invincibility: OFF (Debug)");
+        }
     }
 
     update(inputManager, enemies = []) {
@@ -107,12 +120,16 @@ export class Player {
         if (!this.isActive) return;
 
         if (this.isInvincible) {
-            this.invincibilityTimer--;
-            if (this.invincibilityTimer <= 0) {
+            // Only decrement timer if it's not the debug "infinite" value
+            if (this.invincibilityTimer < 999990) {
+                this.invincibilityTimer--;
+            }
+            // Normal invincibility wears off; debug invincibility only by toggle.
+            if (this.invincibilityTimer <= 0 && this.invincibilityTimer > -1) {
                 this.isInvincible = false;
-                console.log("Player invincibility ended.");
             }
         }
+
 
         const touchTargetPos = inputManager.getTouchPlayerTargetPosition();
         let keyboardMovementActive =
@@ -210,7 +227,13 @@ export class Player {
                 if (bomb.explosionTimer === 0) this.blasterBombs.splice(i, 1);
             } else {
                 bomb.timeToImpact--;
-                if (bomb.timeToImpact <= 0) bomb.explosionTimer = bomb.explosionDuration;
+                if (bomb.timeToImpact <= 0) {
+                    bomb.explosionTimer = bomb.explosionDuration;
+                    if (!bomb.hasExplodedSoundPlayed && this.soundManager) {
+                        this.soundManager.playSound('blasterExplosion', 0.6);
+                        bomb.hasExplodedSoundPlayed = true;
+                    }
+                }
             }
         }
     }
@@ -223,11 +246,17 @@ export class Player {
                 const spawnY = this.position.y - (this.height / 2) - (ZAPPER_HEIGHT_FOR_OFFSET / 2) + ZAPPER_SPAWN_OFFSET_Y;
                 zapper.init(spawnX, spawnY);
                 this.zappersOnScreen.push(zapper);
+                if (this.soundManager) {
+                    this.soundManager.playSound('zapper', 0.3);
+                }
             }
         }
     }
 
     dropBlaster() {
+        if (this.soundManager) {
+            this.soundManager.playSound('blasterFire', 0.5);
+        }
         const newBomb = {
             x: this.blasterSightPosition.x,
             y: this.blasterSightPosition.y,
@@ -235,17 +264,20 @@ export class Player {
             explosionRadius: BLASTER_BOMB_EXPLOSION_RADIUS,
             explosionTimer: 0,
             explosionDuration: BLASTER_BOMB_EXPLOSION_DURATION,
-            color: 'grey'
+            color: 'grey',
+            hasExplodedSoundPlayed: false
         };
         this.blasterBombs.push(newBomb);
     }
 
     draw(ctx) {
         if (!this.isActive) return;
-
         ctx.save();
         if (this.isInvincible) {
-            if (Math.floor(this.invincibilityTimer / 6) % 2 === 0) {
+            const flashAlternate = (this.invincibilityTimer < 999990) ?
+                                   (Math.floor(this.invincibilityTimer / 6) % 2 === 0) :
+                                   (Math.floor(Date.now() / 100) % 2 === 0); // Continuous flash for debug
+            if (flashAlternate) {
                 ctx.globalAlpha = 0.6;
             } else {
                 ctx.globalAlpha = 1.0;
@@ -259,15 +291,11 @@ export class Player {
         ctx.lineTo(this.position.x + this.width / 2, this.position.y + this.height / 2);
         ctx.closePath();
         ctx.fill();
-
         ctx.fillStyle = 'skyblue';
         ctx.beginPath();
         ctx.arc(this.position.x, this.position.y, this.width / 4, 0, Math.PI * 2);
         ctx.fill();
 
-        if (this.isInvincible) {
-            ctx.globalAlpha = 1.0;
-        }
         ctx.restore();
 
         ctx.strokeStyle = this.blasterSightBlinkColor;
@@ -282,13 +310,11 @@ export class Player {
         ctx.beginPath();
         ctx.arc(this.blasterSightPosition.x, this.blasterSightPosition.y, BLASTER_SIGHT_DOT_RADIUS, 0, Math.PI * 2);
         ctx.fill();
-
         for (const zapper of this.zappersOnScreen) {
             if (zapper.isActiveInPool) {
                 zapper.draw(ctx);
             }
         }
-
         for (const bomb of this.blasterBombs) {
             if (bomb.explosionTimer > 0) {
                 const currentRadius = bomb.explosionRadius * (1 - (bomb.explosionTimer / bomb.explosionDuration));
