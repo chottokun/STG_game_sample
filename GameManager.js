@@ -34,17 +34,15 @@ const DEROTA_HP = 3;
 const DEROTA_SCORE = 200;
 const DEROTA_DEFAULT_WIDTH = 40;
 
-const DOMGRAM_DEFAULT_WIDTH = 50; // Default width for DomGram, matches DomGramEnemy.js
-const GROBDA_DEFAULT_WIDTH = 40;  // Default width for Grobda, matches GrobdaEnemy.js
+const DOMGRAM_DEFAULT_WIDTH = 50;
+const GROBDA_DEFAULT_WIDTH = 40;
 
 const CORE_WIDTH = 120;
 const DEFAULT_AREA_LENGTH = 5000;
 
-// Sol Trigger Constants
 const SOL_TRIGGER_SEQUENCE = ['left', 'right', 'middle'];
 const SOL_SCORE_BONUS = 2000;
 
-// Extend (Extra Life) System Constants
 const FIRST_EXTEND_SCORE = 20000;
 const SUBSEQUENT_EXTEND_INTERVAL = 80000;
 const ONE_UP_DISPLAY_DURATION_FRAMES = 120;
@@ -72,12 +70,17 @@ export class GameManager {
         this.solActive = false;
         this.solObject = null;
 
+        // Initialize replay data properties here
+        this.replayData = [];
+        this.currentFrameCount = 0;
+
         this.effectManager = new EffectManager(this.canvas);
         this.poolManager = new ObjectPoolManager();
 
         this.poolManager.registerPool('zapperBullet', ZapperBullet, 5);
 
         this.enemySpawnTimeline = [
+            // ... (Full timeline as per Turn 40/42) ...
             // --- Area 1 --- (scrollPos 0 to AREA_LENGTH - 1)
             { "scrollPos": 100, "enemyId": "a1_toroid_1", "spawnX": this.canvas.width / 2, "enemyType": "AirEnemy" },
             { "scrollPos": 300, "enemyId": "a1_toroid_2", "spawnX": this.canvas.width / 3, "enemyType": "AirEnemy" },
@@ -190,6 +193,7 @@ export class GameManager {
     }
 
     spawnEnemies(enemiesArray, canvas) {
+        // ... (rest of the spawnEnemies method as per Turn 42)
         if (this.gameState !== 'playing' || this.isBossActive) return;
         const effectiveScrollCheck = this.currentScrollPos;
         while (this.nextSpawnIndex < this.enemySpawnTimeline.length &&
@@ -227,6 +231,7 @@ export class GameManager {
     }
 
     spawnBoss(enemiesArray, canvas) {
+        // ... (spawnBoss method as per Turn 42) ...
         if (this.isBossActive || this.gameState !== 'playing') return;
         console.log(`Spawning boss for Area ${this.currentArea} at scrollPos ${this.currentScrollPos}`);
         this.isBossActive = true;
@@ -237,6 +242,7 @@ export class GameManager {
     }
 
     bossDefeated() {
+        // ... (bossDefeated method as per Turn 42) ...
         console.log("Boss defeated!");
         this.isBossActive = false;
         this.currentArea++;
@@ -244,6 +250,7 @@ export class GameManager {
     }
 
     pyramidDestroyed(pyramidId) {
+        // ... (pyramidDestroyed method as per Turn 42) ...
         if (this.solActive || (this.solObject && !this.solObject.isActive)) {
              this.pyramidDestructionOrder = [];
              return;
@@ -268,6 +275,7 @@ export class GameManager {
     }
 
     spawnSol() {
+        // ... (spawnSol method as per Turn 42) ...
         if (this.solActive || (this.solObject && !this.solObject.isActive)) return;
         this.solActive = true;
         const spawnX = this.canvas.width / 2;
@@ -277,6 +285,7 @@ export class GameManager {
     }
 
     updateSol(player) {
+        // ... (updateSol method as per Turn 42) ...
         if (!this.solObject || !this.solObject.isActive) {
             if(this.solActive && this.solObject && !this.solObject.isActive) this.solActive = false;
             this.solObject = null;
@@ -304,6 +313,7 @@ export class GameManager {
     }
 
     addScore(points) {
+        // ... (addScore method as per Turn 42) ...
         if (this.gameState !== 'playing') return;
         this.score += points;
         if (this.score > this.highScore) {
@@ -324,6 +334,7 @@ export class GameManager {
     }
 
     playerDied(player) {
+        // ... (playerDied method as per Turn 42) ...
         if (this.gameState !== 'playing') return;
         this.playerLives--;
         if (this.playerLives < 0) {
@@ -358,11 +369,13 @@ export class GameManager {
     }
 
     saveHighScore() {
+        // ... (saveHighScore method as per Turn 42) ...
         localStorage.setItem(HIGH_SCORE_STORAGE_KEY, this.highScore.toString());
         console.log("High score saved:", this.highScore);
     }
 
     resetGame(player, enemiesArray) {
+        // ... (resetGame method as per Turn 42, including replayData reset) ...
         console.log("Resetting game...");
         this.score = 0;
         this.playerLives = INITIAL_PLAYER_LIVES;
