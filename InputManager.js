@@ -55,7 +55,9 @@ export class InputManager {
             'k': 'debugKillAllEnemies',
             'K': 'debugKillAllEnemies',
             'n': 'debugNextArea',
-            'N': 'debugNextArea'
+            'N': 'debugNextArea',
+            'd': 'debugTogglePanel',
+            'D': 'debugTogglePanel'
         };
 
         for (const key in this.keyMap) {

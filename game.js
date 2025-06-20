@@ -2,7 +2,7 @@ import { Player } from './Player.js';
 import { AirEnemy, ZakatoEnemy, BacuraEnemy, ZoshyEnemy, DerotaEnemy, GroundEnemy } from './Enemy.js';
 import { PyramidEnemy } from './PyramidEnemy.js';
 import { SolObject } from './SolObject.js';
-import { AndorgenesisCoreEnemy } from './AndorgenesisCoreEnemy.js';
+import { AndorgenesisCoreEnemy, AndorgenesisTurretEnemy } from './AndorgenesisCoreEnemy.js';
 import { DomGramEnemy } from './DomGramEnemy.js';
 import { GrobdaEnemy } from './GrobdaEnemy.js';
 import { GameManager } from './GameManager.js';
@@ -38,9 +38,9 @@ document.addEventListener('keydown', (event) => {
             gameManager.resetGame(player, enemies);
         }
     }
-    // TEMP: Hardcoded replay trigger (press 'R' key)
+    // Debug key 'R' for replay is already here from previous task
     if (event.key === 'r' || event.key === 'R') {
-        if (gameManager.replayData.length > 1 && !gameManager.isReplayMode && gameManager.gameState !== 'playing') { // Ensure there's more than just seed & not already in replay or active game
+        if (gameManager.replayData.length > 1 && !gameManager.isReplayMode && gameManager.gameState !== 'playing') {
             console.log("Attempting to start replay...");
             const replayToPlay = { data: JSON.parse(JSON.stringify(gameManager.replayData)) };
             gameManager.startReplay(replayToPlay, player, enemies);
@@ -69,9 +69,25 @@ function gameLoop(timestamp) {
     const deltaTime = timestamp - lastTime;
     lastTime = timestamp;
 
+    // Handle Debug Inputs (processed once per press due to isActionJustPressed)
+    if (!inputManager.isOverridden) { // Don't allow debug commands during replay playback
+        if (inputManager.isActionJustPressed('debugToggleInvincibility')) {
+            player.toggleInvincibilityDebug();
+        }
+        if (inputManager.isActionJustPressed('debugKillAllEnemies')) {
+            gameManager.debugKillAllEnemies(enemies);
+        }
+        if (inputManager.isActionJustPressed('debugNextArea')) {
+            gameManager.debugNextAreaOrBoss(enemies, canvas); // Pass canvas if needed by debug function
+        }
+    }
+
     if (inputManager.isActionJustPressed('togglePauseAction') &&
-        (gameManager.gameState === 'playing' || gameManager.gameState === 'paused')) { // Allow pause only if playing or already paused
+        (gameManager.gameState === 'playing' || gameManager.gameState === 'paused')) {
         gameManager.togglePause();
+    }
+    if (inputManager.isActionJustPressed('debugTogglePanel')) { // New: Toggle debug panel
+        gameManager.toggleDebugPanel();
     }
 
     gameManager.update(deltaTime, enemies, canvas, player, inputManager);
@@ -104,7 +120,7 @@ function gameLoop(timestamp) {
         }
 
     } else if (gameManager.gameState === 'playing') {
-        // ... (rest of the 'playing' state logic from Turn 58 - remains unchanged)
+        // ... (Full 'playing' state logic from Turn 55 - collision, updates, drawing)
         ctx.fillStyle = 'black';
         ctx.fillRect(0, 0, canvas.width, canvas.height);
 

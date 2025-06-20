@@ -4,7 +4,7 @@ import { AndorgenesisTurretEnemy } from './AndorgenesisTurretEnemy.js';
 
 // Constants for AndorgenesisCoreEnemy
 const CORE_DEFAULT_ID = "andorgenesis_core";
-const CORE_HP = 75;
+const CORE_DEFAULT_HP = 150; // Increased HP
 const CORE_SCORE = 10000;
 const CORE_WIDTH = 120;
 const CORE_HEIGHT = 120;
@@ -31,16 +31,19 @@ const CORE_FAST_BULLET_COLOR = 'yellow';
 
 export class AndorgenesisCoreEnemy extends GroundEnemy {
     constructor(position, initialMapY, config = {}) {
+        // HP for the core is taken from config if provided, otherwise CORE_DEFAULT_HP
+        const initialHp = config.hp || CORE_DEFAULT_HP;
         super(
             CORE_DEFAULT_ID,
             "ground",
             position,
-            config.hp || CORE_HP,
+            initialHp,
             config.score || CORE_SCORE,
             CORE_WIDTH,
             CORE_HEIGHT,
             initialMapY
         );
+        this.maxHp = initialHp; // Store max HP for HP bar calculation
 
         this.state = "entering";
         this.entryAnimTimer = INITIAL_ENTRY_ANIM_TIMER;
@@ -52,6 +55,7 @@ export class AndorgenesisCoreEnemy extends GroundEnemy {
         this.turretsDestroyedCount = 0;
         this.attackTimer = Math.random() * CORE_ATTACK_COOLDOWN_PHASE1;
         this.bullets = [];
+        this.gameManagerRef = null;
 
         this.turrets = [];
         const turretOffsetX = CORE_WIDTH / 2 + 10;
@@ -61,6 +65,9 @@ export class AndorgenesisCoreEnemy extends GroundEnemy {
 
     update(currentScrollPos, playerPosition, canvas, gameManager) {
         super.update(currentScrollPos);
+        if (!this.gameManagerRef && gameManager) {
+            this.gameManagerRef = gameManager;
+        }
         if (this.isDestroyed && this.state !== 'dying') return;
 
         switch (this.state) {
@@ -106,8 +113,8 @@ export class AndorgenesisCoreEnemy extends GroundEnemy {
                 this.explosionParticles = this.explosionParticles.filter(p => p.alpha > 0);
                 if (this.deathAnimTimer <= 0) {
                     this.isDestroyed = true;
-                    if (gameManager) {
-                        gameManager.bossDefeated();
+                    if (this.gameManagerRef) { // Use stored ref
+                        this.gameManagerRef.bossDefeated();
                     }
                 }
                 break;
@@ -132,7 +139,18 @@ export class AndorgenesisCoreEnemy extends GroundEnemy {
         if (this.phase === 1 && this.turretsDestroyedCount >= this.turrets.length) {
             this.phase = 2;
             console.log("All turrets destroyed! Andorgenesis Core entering Phase 2!");
-            this.attackTimer = CORE_ATTACK_COOLDOWN_PHASE2 / 2;
+            this.attackTimer = CORE_ATTACK_COOLDOWN_PHASE2 / 3;
+
+            if (this.gameManagerRef) {
+                this.gameManagerRef.effectManager.addEffect('explosion', {
+                    x: this.position.x + this.width / 2,
+                    y: this.position.y + this.height / 2,
+                    size: this.width * 1.1,
+                    duration: 25,
+                    color: 'rgba(180, 180, 255, 0.7)'
+                });
+                this.gameManagerRef.soundManager.playSound('bossHit', 0.8); // Placeholder for phase change sound
+            }
         }
     }
 
@@ -147,7 +165,7 @@ export class AndorgenesisCoreEnemy extends GroundEnemy {
                 CORE_BULLET_WIDTH, CORE_BULLET_HEIGHT,
                 CORE_BULLET_COLOR, CORE_BULLET_SPEED, centerAngle
             ));
-        } else { // Phase 2: 3-way spread shot + one fast aimed shot
+        } else {
             const angles = [centerAngle - SPREAD_ANGLE, centerAngle, centerAngle + SPREAD_ANGLE];
             for (const angle of angles) {
                 this.bullets.push(new EnemyBullet(
@@ -158,7 +176,6 @@ export class AndorgenesisCoreEnemy extends GroundEnemy {
                     angle
                 ));
             }
-            // Add the additional fast, aimed bullet
             this.bullets.push(new EnemyBullet(
                 bulletX, bulletY,
                 CORE_FAST_BULLET_WIDTH, CORE_FAST_BULLET_HEIGHT,
@@ -220,10 +237,8 @@ export class AndorgenesisCoreEnemy extends GroundEnemy {
         if (this.state === "entering") hpBarOverallAlpha = this.currentAlpha;
         else if (this.state === "dying") hpBarOverallAlpha = Math.max(0, (this.deathAnimTimer / CORE_DEATH_ANIM_DURATION));
 
-
         if ((this.state === 'active' || (this.state === 'entering' && this.currentAlpha > 0.1) || this.state === 'dying') && this.hp > 0) {
-            const maxHpForBar = CORE_HP;
-            const hpPercentage = Math.max(0, this.hp / maxHpForBar);
+            const hpPercentage = Math.max(0, this.hp / this.maxHp); // Use stored maxHp
             const hpBarWidth = this.width * 0.8;
             const hpBarHeight = 10;
             const currentHpWidth = hpBarWidth * hpPercentage;
@@ -254,7 +269,7 @@ export class AndorgenesisCoreEnemy extends GroundEnemy {
                  ctx.globalAlpha = Math.max(0, (this.deathAnimTimer / CORE_DEATH_ANIM_DURATION));
                  turret.draw(ctx);
                  ctx.restore();
-            } else {
+            } else if (!turret.isDestroyed || turret.isDyingWithBoss) { // Draw if not independently destroyed OR dying with boss
                 turret.draw(ctx);
             }
         }
