@@ -1,7 +1,8 @@
 import { AirEnemy, ZakatoEnemy, BacuraEnemy, ZoshyEnemy, DerotaEnemy, GroundEnemy } from './Enemy.js';
 import { PyramidEnemy } from './PyramidEnemy.js';
 import { SolObject } from './SolObject.js';
-import { AndorgenesisCoreEnemy, AndorgenesisTurretEnemy } from './AndorgenesisCoreEnemy.js';
+import { AndorgenesisCoreEnemy } from './AndorgenesisCoreEnemy.js';
+import { AndorgenesisTurretEnemy } from './AndorgenesisTurretEnemy.js'; // Corrected import
 import { DomGramEnemy } from './DomGramEnemy.js';
 import { GrobdaEnemy } from './GrobdaEnemy.js';
 import { EffectManager } from './EffectManager.js';
@@ -43,7 +44,6 @@ const PAUSED_GAME_STATE = 'paused';
 export class GameManager {
     constructor(canvas) {
         this.canvas = canvas;
-        this.isDebugPanelVisible = false; // Initialize debug panel visibility
         this.score = 0;
         this.highScore = parseInt(localStorage.getItem(HIGH_SCORE_STORAGE_KEY) || '0');
         this.playerLives = INITIAL_PLAYER_LIVES;
@@ -69,7 +69,7 @@ export class GameManager {
         this.poolManager = new ObjectPoolManager();
         this.soundManager = new SoundManager();
         this.poolManager.registerPool('zapperBullet', ZapperBullet, 5);
-        this.enemySpawnTimeline = [ /* ... Full timeline ... */
+        this.enemySpawnTimeline = [
             { "scrollPos": 100, "enemyId": "a1_toroid_1", "spawnX": this.canvas.width / 2, "enemyType": "AirEnemy" },
             { "scrollPos": 300, "enemyId": "a1_toroid_2", "spawnX": this.canvas.width / 3, "enemyType": "AirEnemy" },
             { "scrollPos": 350, "enemyId": "a1_toroid_3", "spawnX": this.canvas.width * 2 / 3, "enemyType": "AirEnemy" },
@@ -148,13 +148,8 @@ export class GameManager {
         this.isGameOverInputRegistered = false;
     }
 
-    toggleDebugPanel() {
-        this.isDebugPanelVisible = !this.isDebugPanelVisible;
-        console.log("Debug Panel Visible:", this.isDebugPanelVisible);
-    }
-
+    // ... (rest of methods: update, spawnEnemies, spawnBoss, etc. remain unchanged from Turn 64)
     update(deltaTime, enemiesArray, canvas, player, inputManager) {
-        // ... (rest of update method as per Turn 60/62 - including replay logic, pausing, etc.)
         if (this.gameState !== 'playing' && this.gameState !== PAUSED_GAME_STATE) {
              if (this.oneUpDisplayTimer > 0) this.oneUpDisplayTimer--;
              this.effectManager.update();
@@ -206,7 +201,6 @@ export class GameManager {
     }
 
     spawnEnemies(enemiesArray, canvas) {
-        // ... (spawnEnemies method)
         if (this.gameState !== 'playing' || this.isBossActive) return;
         const effectiveScrollCheck = this.currentScrollPos;
         while (this.nextSpawnIndex < this.enemySpawnTimeline.length &&
@@ -244,7 +238,6 @@ export class GameManager {
     }
 
     spawnBoss(enemiesArray, canvas) {
-        // ...
         if (this.isBossActive || this.gameState !== 'playing') return;
         console.log(`Spawning boss for Area ${this.currentArea} at scrollPos ${this.currentScrollPos}`);
         this.isBossActive = true;
@@ -255,7 +248,6 @@ export class GameManager {
     }
 
     bossDefeated() {
-        // ...
         console.log("Boss defeated!");
         this.isBossActive = false;
         this.currentArea++;
@@ -263,7 +255,6 @@ export class GameManager {
     }
 
     pyramidDestroyed(pyramidId) {
-        // ...
         if (this.solActive || (this.solObject && !this.solObject.isActive)) {
              this.pyramidDestructionOrder = [];
              return;
@@ -288,7 +279,6 @@ export class GameManager {
     }
 
     spawnSol() {
-        // ...
         if (this.solActive || (this.solObject && !this.solObject.isActive)) return;
         this.solActive = true;
         const spawnX = this.canvas.width / 2;
@@ -298,7 +288,6 @@ export class GameManager {
     }
 
     updateSol(player) {
-        // ...
         if (!this.solObject || !this.solObject.isActive) {
             if(this.solActive && this.solObject && !this.solObject.isActive) this.solActive = false;
             this.solObject = null;
@@ -327,7 +316,6 @@ export class GameManager {
     }
 
     addScore(points) {
-        // ...
         if (this.gameState !== 'playing' && !this.isReplayMode && this.gameState !== PAUSED_GAME_STATE) return;
         this.score += points;
         if (this.score > this.highScore) {
@@ -350,7 +338,6 @@ export class GameManager {
     }
 
     playerDied(player) {
-        // ...
         if (this.isReplayMode && this.playerLives <= 0 && this.gameState !== 'gameOver') {
             console.log("Player lives at 0 or less during replay. True game over point might have passed in recording.");
         } else if (!this.isReplayMode) {
@@ -386,7 +373,6 @@ export class GameManager {
     }
 
     saveHighScore() {
-        // ...
         localStorage.setItem(HIGH_SCORE_STORAGE_KEY, this.highScore.toString());
         console.log("High score saved:", this.highScore);
     }
@@ -397,14 +383,11 @@ export class GameManager {
             const enemy = enemiesArray[i];
             if (!(enemy instanceof AndorgenesisCoreEnemy || enemy instanceof AndorgenesisTurretEnemy)) {
                 if (typeof enemy.onHit === 'function') {
-                    enemy.hp = 0; // Set HP to 0
-                    enemy.onHit();  // Trigger standard onHit logic (which should set isDestroyed)
-                                    // and potentially trigger effects/score via game.js logic
-                } else { // Fallback if no onHit
+                    enemy.hp = 0;
+                    enemy.onHit();
+                } else {
                     enemy.isDestroyed = true;
                 }
-                // The main game loop's collision/destruction logic in game.js will handle score and explosion effects
-                // when it processes the enemy with isDestroyed = true or 0 HP.
             }
         }
     }
@@ -416,21 +399,19 @@ export class GameManager {
                 console.log("Debug: Boss is active. Setting HP to 1 for quick defeat.");
                 boss.hp = 1;
                 if (typeof boss.onHit === 'function') {
-                    boss.onHit(); // Trigger onHit to process low HP and potential phase changes/death
+                    boss.onHit();
                 }
             } else {
                 console.log("Debug: Boss active, but no AndorgenesisCoreEnemy instance found to modify.");
             }
         } else {
-            // Advance scroll position to just before the current area's boss trigger point
-            const targetScrollPos = (this.currentArea * this.AREA_LENGTH) - (this.scrollSpeed * 5); // 5 frames before trigger
-            this.currentScrollPos = Math.max(this.currentScrollPos, targetScrollPos); // Ensure we don't go backward
+            const targetScrollPos = (this.currentArea * this.AREA_LENGTH) - (this.scrollSpeed * 5);
+            this.currentScrollPos = Math.max(this.currentScrollPos, targetScrollPos);
             console.log(`Debug: Advanced scroll to ${this.currentScrollPos} (near end of Area ${this.currentArea}). Boss should trigger soon.`);
         }
     }
 
     resetGame(player, enemiesArray) {
-        // ...
         console.log("Resetting game...");
         this.score = 0;
         this.playerLives = INITIAL_PLAYER_LIVES;
