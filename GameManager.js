@@ -44,6 +44,7 @@ const PAUSED_GAME_STATE = 'paused';
 export class GameManager {
     constructor(canvas) {
         this.canvas = canvas;
+        this.isDebugPanelVisible = false;
         this.score = 0;
         this.highScore = parseInt(localStorage.getItem(HIGH_SCORE_STORAGE_KEY) || '0');
         this.playerLives = INITIAL_PLAYER_LIVES;
@@ -148,6 +149,11 @@ export class GameManager {
         this.isGameOverInputRegistered = false;
     }
 
+    toggleDebugPanel() {
+        this.isDebugPanelVisible = !this.isDebugPanelVisible;
+        console.log("Debug Panel Visible:", this.isDebugPanelVisible);
+    }
+
     update(deltaTime, enemiesArray, canvas, player, inputManager) {
         if (this.gameState !== 'playing' && this.gameState !== PAUSED_GAME_STATE) {
              if (this.oneUpDisplayTimer > 0) this.oneUpDisplayTimer--;
@@ -197,6 +203,85 @@ export class GameManager {
             this.oneUpDisplayTimer--;
         }
         this.effectManager.update();
+    }
+
+    startReplay(replayObject, player, enemiesArray) {
+        if (!replayObject || !replayObject.data || replayObject.data.length === 0) {
+            console.error("Invalid or empty replay data provided.");
+            return;
+        }
+        console.log("Attempting to start replay...");
+        this.isReplayMode = true;
+        this.replayPlaybackData = replayObject.data;
+        const seedEntry = this.replayPlaybackData[0];
+        if (seedEntry && seedEntry.seed !== undefined) {
+            this.currentSeed = seedEntry.seed;
+            this.currentReplayFrameIndex = 1;
+        } else {
+            this.currentSeed = Date.now();
+            this.currentReplayFrameIndex = 0;
+            console.warn("No seed found in replay data, using new seed. Playback might desync.");
+        }
+        console.log("Starting replay with seed:", this.currentSeed);
+        // TODO: Initialize game RNGs with this.currentSeed
+        this.resetGame(player, enemiesArray);
+        this.gameState = 'playing';
+        this.currentFrameCount = 0;
+        if (this.soundManager.audioUnlocked) {
+            this.soundManager.playBGM('bgm_area1', 0.2);
+        } else {
+            console.log("Audio not unlocked, BGM for replay might not start immediately.");
+        }
+    }
+
+    startGame(player, enemiesArray) { // player, enemiesArray args are not used here but kept for consistency if game.js calls it with them
+        if (this.gameState === 'titleScreen' || this.gameState === 'gameOver') {
+            this.currentSeed = Date.now();
+            console.log("Game starting with seed:", this.currentSeed);
+            // TODO: Initialize game RNGs with this.currentSeed
+            this.replayData = [{ seed: this.currentSeed }];
+            this.currentFrameCount = 0;
+            this.isReplayMode = false;
+            this.gameState = 'playing';
+            if (this.soundManager.audioUnlocked) { // Check if audio is unlocked before playing BGM
+                this.soundManager.playBGM('bgm_area1', 0.2);
+            } else {
+                 console.log("Audio not unlocked, BGM for new game might not start immediately.");
+            }
+            this.isGameOverInputRegistered = false; // Allow 'Enter' on next game over
+        }
+    }
+
+    resetGame(player, enemiesArray) {
+        console.log("Resetting game...");
+        this.score = 0;
+        this.playerLives = INITIAL_PLAYER_LIVES;
+        this.currentScrollPos = 0;
+        this.nextSpawnIndex = 0;
+        this.isBossActive = false;
+        this.currentArea = 1;
+        this.nextExtendScore = FIRST_EXTEND_SCORE;
+        this.isFirstExtendAwarded = false;
+        this.oneUpDisplayTimer = 0;
+        this.pyramidDestructionOrder = [];
+        this.solActive = false;
+        this.solObject = null;
+        this.effectManager.clear();
+        this.poolManager.resetAllPools();
+        this.soundManager.stopBGM('bgm_area1');
+        this.soundManager.stopBGM('bgm_boss');
+        this.replayData = [];
+        this.currentFrameCount = 0;
+        this.isReplayMode = false;
+        this.replayPlaybackData = [];
+        this.currentReplayFrameIndex = 0;
+        // currentSeed is set at the start of a new game or replay
+        enemiesArray.length = 0;
+        if (player) {
+            player.reset();
+        }
+        this.gameState = INITIAL_GAME_STATE; // Set to title screen *after* all resets
+        console.log("Game reset. Lives:", this.playerLives, "Score:", this.score);
     }
 
     spawnEnemies(enemiesArray, canvas) {
@@ -441,5 +526,3 @@ export class GameManager {
         console.log("Game reset. Lives:", this.playerLives, "Score:", this.score);
     }
 }
-
-[end of GameManager.js]

@@ -2,8 +2,7 @@ import { Player } from './Player.js';
 import { AirEnemy, ZakatoEnemy, BacuraEnemy, ZoshyEnemy, DerotaEnemy, GroundEnemy } from './Enemy.js';
 import { PyramidEnemy } from './PyramidEnemy.js';
 import { SolObject } from './SolObject.js';
-import { AndorgenesisCoreEnemy } from './AndorgenesisCoreEnemy.js';
-import { AndorgenesisTurretEnemy } from './AndorgenesisTurretEnemy.js'; // Corrected import
+import { AndorgenesisCoreEnemy, AndorgenesisTurretEnemy } from './AndorgenesisCoreEnemy.js';
 import { DomGramEnemy } from './DomGramEnemy.js';
 import { GrobdaEnemy } from './GrobdaEnemy.js';
 import { GameManager } from './GameManager.js';
@@ -80,6 +79,13 @@ function gameLoop(timestamp) {
             gameManager.debugNextAreaOrBoss(enemies, canvas);
         }
         if (inputManager.isActionJustPressed('debugTogglePanel')) {
+            console.log('--- Debug: Before toggleDebugPanel ---');
+            console.log('gameManager object:', gameManager);
+            console.log('typeof gameManager.toggleDebugPanel:', typeof gameManager.toggleDebugPanel);
+            console.log('gameManager instanceof GameManager:', gameManager instanceof GameManager);
+            if (gameManager && typeof gameManager.constructor === 'function' && gameManager.constructor.prototype) {
+                console.log('GameManager.prototype.hasOwnProperty("toggleDebugPanel"):', gameManager.constructor.prototype.hasOwnProperty('toggleDebugPanel'));
+            }
             gameManager.toggleDebugPanel();
         }
     }
@@ -114,7 +120,16 @@ function gameLoop(timestamp) {
             gameManager.resetGame(player, enemies);
             player.reset();
             enemies.length = 0;
-            gameManager.startGame(player, enemies);
+
+            console.log('--- Debug: Before startGame ---');
+            console.log('gameManager object:', gameManager);
+            console.log('typeof gameManager.startGame:', typeof gameManager.startGame);
+            console.log('gameManager instanceof GameManager:', gameManager instanceof GameManager);
+            if (gameManager && typeof gameManager.constructor === 'function' && gameManager.constructor.prototype) {
+                console.log('GameManager.prototype.hasOwnProperty("startGame"):', gameManager.constructor.prototype.hasOwnProperty('startGame'));
+            }
+            gameManager.startGame(); // Arguments removed as per Turn 89 fix
+
             gameManager.isGameOverInputRegistered = false;
         }
 
@@ -162,7 +177,6 @@ function gameLoop(timestamp) {
 
             if (player.isActive && !player.isInvincible) {
                 const enemyWasInitiallyAlive = !enemy.isDestroyed;
-                // Zappers vs Enemies
                 for (let j = player.zappersOnScreen.length - 1; j >= 0; j--) {
                     const zapper = player.zappersOnScreen[j];
                     if (!zapper.isActiveInPool) continue;
@@ -186,7 +200,6 @@ function gameLoop(timestamp) {
                     }
                 }
 
-                // Blaster Bombs vs Enemies
                 if (!enemy.isDestroyed && enemyWasInitiallyAlive) {
                     for (const bomb of player.blasterBombs) {
                         if (bomb.explosionTimer > 0) {
@@ -211,7 +224,6 @@ function gameLoop(timestamp) {
                     }
                 }
 
-                // Player vs Enemy Body
                 if (!enemy.isDestroyed && enemyWasInitiallyAlive) {
                     const playerRect = {x: player.position.x - player.width/2, y: player.position.y - player.height/2, width: player.width, height: player.height};
                     const enemyRect = {x: enemy.position.x, y: enemy.position.y, width: enemy.width, height: enemy.height};
@@ -230,7 +242,6 @@ function gameLoop(timestamp) {
                     }
                 }
 
-                // Player vs Enemy Bullets
                 let allEnemyBullets = [];
                 if (enemy.bullets && enemy.bullets.length > 0) {
                     allEnemyBullets = allEnemyBullets.concat(enemy.bullets);
@@ -258,7 +269,6 @@ function gameLoop(timestamp) {
                 if (gameManager.gameState === 'gameOver') break;
             }
 
-            // Andorgenesis Turret Weapon Collisions
             if (enemy instanceof AndorgenesisCoreEnemy && enemy.turrets) {
                 for (const turret of enemy.turrets) {
                     if (!turret.isDestroyed) {
@@ -396,6 +406,31 @@ function gameLoop(timestamp) {
         ctx.textAlign = "left";
 
         gameManager.effectManager.draw(ctx);
+    }
+
+    // Draw Debug Panel if visible (drawn on top of everything)
+    if (gameManager.isDebugPanelVisible) {
+        const panelX = 10;
+        const panelY = canvas.height - 110;
+        const panelWidth = 220;
+        const panelHeight = 95;
+        const lineHeight = 15;
+
+        ctx.fillStyle = "rgba(0, 0, 0, 0.65)";
+        ctx.fillRect(panelX, panelY, panelWidth, panelHeight);
+
+        ctx.fillStyle = "white";
+        ctx.font = "12px Arial";
+        ctx.textAlign = "left";
+        let lineNum = 0;
+
+        const fps = (deltaTime > 0 ? (1000 / deltaTime) : 0).toFixed(1);
+        ctx.fillText(`FPS: ${fps}`, panelX + 5, panelY + 10 + (lineNum++ * lineHeight));
+        ctx.fillText(`Enemies: ${enemies.length}`, panelX + 5, panelY + 10 + (lineNum++ * lineHeight));
+        ctx.fillText(`Player X: ${player.position.x.toFixed(1)}, Y: ${player.position.y.toFixed(1)}`, panelX + 5, panelY + 10 + (lineNum++ * lineHeight));
+        ctx.fillText(`Invincible: ${player.isInvincible} (${player.isInvincible ? (player.invincibilityTimer > 900000 ? 'Debug' : player.invincibilityTimer.toFixed(0)) : 'No'})`, panelX + 5, panelY + 10 + (lineNum++ * lineHeight));
+        ctx.fillText(`Scroll: ${gameManager.currentScrollPos.toFixed(0)}`, panelX + 5, panelY + 10 + (lineNum++ * lineHeight));
+        ctx.fillText(`Area: ${gameManager.currentArea} | Boss: ${gameManager.isBossActive}`, panelX + 5, panelY + 10 + (lineNum++ * lineHeight));
     }
 
     requestAnimationFrame(gameLoop);
