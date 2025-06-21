@@ -14,7 +14,7 @@ import { SoundManager } from './SoundManager.js';
 const INITIAL_PLAYER_LIVES = 3;
 const INITIAL_GAME_STATE = 'titleScreen';
 const DEFAULT_SCROLL_SPEED = 2;
-const HIGH_SCORE_STORAGE_KEY = 'xevious_highscore';
+const HIGH_SCORE_STORAGE_KEY = 'stg_xevi_highscore';
 const DEFAULT_ENEMY_HP = 1;
 const DEFAULT_ENEMY_SCORE = 50;
 const DEFAULT_ENEMY_SPAWN_Y_OFFSET = -30;

@@ -104,7 +104,7 @@ function gameLoop(timestamp) {
         ctx.fillStyle = 'white';
         ctx.font = 'bold 48px Arial';
         ctx.textAlign = 'center';
-        ctx.fillText('Xevious Clone', canvas.width / 2, canvas.height / 3 - 20);
+        ctx.fillText('STG Xevi', canvas.width / 2, canvas.height / 3 - 20);
         ctx.font = '28px Arial';
         ctx.fillText('Press Enter or "S" to Start', canvas.width / 2, canvas.height / 2 + 20);
         ctx.fillStyle = 'yellow';
