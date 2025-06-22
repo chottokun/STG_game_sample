@@ -2,7 +2,7 @@ import { GroundEnemy } from './Enemy.js';
 import { EnemyBullet } from './Bullet.js';
 import { AndorgenesisTurretEnemy } from './AndorgenesisTurretEnemy.js';
 
-const BULLET_SPAWN_DISTANCE_OFFSET = 150;
+const BULLET_SPAWN_DISTANCE_OFFSET = 0;
 
 // Constants for AndorgenesisCoreEnemy
 const CORE_DEFAULT_ID = "andorgenesis_core";
