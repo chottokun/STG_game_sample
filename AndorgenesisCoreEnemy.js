@@ -2,6 +2,8 @@ import { GroundEnemy } from './Enemy.js';
 import { EnemyBullet } from './Bullet.js';
 import { AndorgenesisTurretEnemy } from './AndorgenesisTurretEnemy.js';
 
+const BULLET_SPAWN_DISTANCE_OFFSET = 150;
+
 // Constants for AndorgenesisCoreEnemy
 const CORE_DEFAULT_ID = "andorgenesis_core";
 const CORE_DEFAULT_HP = 150; // Increased HP
@@ -155,13 +157,16 @@ export class AndorgenesisCoreEnemy extends GroundEnemy {
     }
 
     fireBullet(playerPosition, canvas) {
-        const bulletX = this.position.x + this.width / 2;
-        const bulletY = this.position.y + this.height / 2;
+        const bulletX = this.position.x + this.width / 2; // Reference point X
+        const bulletY = this.position.y + this.height / 2; // Reference point Y
         const centerAngle = Math.atan2(playerPosition.y - bulletY, playerPosition.x - bulletX);
+
+        const actualBulletSpawnX = (this.position.x + this.width / 2) - Math.cos(centerAngle) * BULLET_SPAWN_DISTANCE_OFFSET;
+        const actualBulletSpawnY = (this.position.y + this.height / 2) - Math.sin(centerAngle) * BULLET_SPAWN_DISTANCE_OFFSET;
 
         if (this.phase === 1) {
             this.bullets.push(new EnemyBullet(
-                bulletX, bulletY,
+                actualBulletSpawnX, actualBulletSpawnY,
                 CORE_BULLET_WIDTH, CORE_BULLET_HEIGHT,
                 CORE_BULLET_COLOR, CORE_BULLET_SPEED, centerAngle
             ));
@@ -169,7 +174,7 @@ export class AndorgenesisCoreEnemy extends GroundEnemy {
             const angles = [centerAngle - SPREAD_ANGLE, centerAngle, centerAngle + SPREAD_ANGLE];
             for (const angle of angles) {
                 this.bullets.push(new EnemyBullet(
-                    bulletX, bulletY,
+                    actualBulletSpawnX, actualBulletSpawnY,
                     CORE_BULLET_WIDTH, CORE_BULLET_HEIGHT,
                     CORE_BULLET_COLOR,
                     CORE_BULLET_SPEED,
@@ -177,7 +182,7 @@ export class AndorgenesisCoreEnemy extends GroundEnemy {
                 ));
             }
             this.bullets.push(new EnemyBullet(
-                bulletX, bulletY,
+                actualBulletSpawnX, actualBulletSpawnY,
                 CORE_FAST_BULLET_WIDTH, CORE_FAST_BULLET_HEIGHT,
                 CORE_FAST_BULLET_COLOR,
                 CORE_FAST_BULLET_SPEED,
